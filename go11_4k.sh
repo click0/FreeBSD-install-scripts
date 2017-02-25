@@ -1,0 +1,432 @@
+#!/bin/sh
+
+# $Id: go9_4k_HDD.sh,v 1.4 2014/09/26 23:07:43 root Exp $
+# $Author: root $
+# $Source: /home/vlad11/scripts/sh/zfs_go9_4k_HDD/RCS/go9_4k_HDD.sh,v $
+#
+# original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
+# This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
+# modifyed with great help of gkontos from http://www.aisecure.net/2011/05/01/root-on-zfs-freebsd-current/
+# by Olaf Klein - monkeytower internet agency http://www.monkeytower.net
+#
+# DISCLAIMER: Use at your own risk! Always make backups, don't blame me if this renders your system unusable or you lose any data!
+#
+# This only works/only tested with FreeBSD 9.0 rc2, you have been warned!
+#
+# Startup the FreeBSD livefs (i used memstick). Go into the Fixit console. and prepare:
+# tcsh
+# set autolist
+# umount /tmp
+# mdmfs -s 512M md1 /tmp
+# ifconfig
+# dhclient nfe0 (or whatever your NIC is)
+# mkdir -p /tmp/bsdinstall_etc
+# echo nameserver 10.0.0.1 >/etc/resolv.conf
+# cd /tmp
+# fetch http://www.monkeytower.net/go9.sh
+# chmod +x go9.sh
+#
+# Execute the script with the following parameter:
+#
+# -p sets the geom provider to use, you can use multiple. Add a name for the GPT labels: -p ad4=black -p ad6=white
+# -s sets the swap_partition_size to create, you can use m/M for megabyte or g/G for gigabyte
+# -S sets the zfs_partition_size to create, you can use m/M for megabyte or g/G for gigabyte, default is all available size
+# -n sets the name of the zpool to create
+# -m sets the zpool raid-mode, stripe (only single disk), mirror (at least two disks) and raidz (at least three disks) or raid10 with at least 4 disks
+# -d sets local directory to get distribution packages from
+#
+# You can use more than one device, creating a mirror. To specify more than one device, use multiple -p options.
+# eg. go.sh -p ad0 -p ad1 -s 512m -n tank
+#
+#
+# in case something goes wrong and you want to start over:
+# zpool destroy tank
+# might be a good idea (_before_ you give it another try).
+#
+# enjoy. Feedback welcome to ok@monkeytower.net
+#
+# regards.
+# olaf.
+
+set -x
+
+txzfiles="/mfs"
+distdir=${txzfiles}"/distdir"
+#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE"
+#ftphost="ftp://ftp.fr.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RELEASE"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
+#ftphost="ftp://ftp5.ru.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
+filelist="base lib32 kernel doc"
+memdisksize=250m
+hostname=core.domain.com
+iface="em0 em1 re0 igb0 vtnet0"
+#iface_manual=YES
+#manual_gw='defaultrouter="1.1.1.1"'
+#manual_iface='ifconfig_em0="inet 1.1.1.2/24"'
+#nameserver="8.8.8.8"
+
+usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
+
+exerr () { echo -e "$*" >&2 ; exit 1; }
+
+while getopts p:s:S:n:f:m:d: arg
+do case ${arg} in
+	p) provider="$provider ${OPTARG}";;
+	s) swap_partition_size=${OPTARG};;
+	S) zfs_partition_size=${OPTARG};;
+	n) poolname=${OPTARG};;
+	m) mode=${OPTARG};;
+	?) exerr ${usage};;
+esac; done; shift $(( ${OPTIND} - 1 ))
+
+if [ -z "$poolname" ] || [ -z "$provider" ] ; then
+	exerr ${usage}
+	exit
+fi
+
+sysctl kern.geom.label.gptid.enable=0
+sysctl kern.geom.debugflags=16
+sysctl vfs.zfs.min_auto_ashift=12
+
+
+#mkdir -p /tmp/bsdinstall_etc
+#echo nameserver $nameserver >/tmp/bsdinstall_etc/resolv.conf
+
+mkdir $txzfiles
+#mdmfs -s $memdisksize md10 $txzfiles
+mdconfig -a -s $memdisksize -u 10
+newfs -U /dev/md10
+mount /dev/md10 $txzfiles
+
+
+for file in ${filelist}; do
+	(fetch -o $txzfiles/$file.txz $ftphost/$file.txz);
+done
+
+# count the number of providers
+devcount=`echo ${provider} | wc -w`
+
+# set our default zpool mirror-mode
+if [ -z "$mode" ]; then
+	if [ "$devcount" -gt "1" ]; then
+		mode='mirror'
+	fi
+	if [ "$devcount" -eq "4" ]; then
+		mode='raid10'
+	else
+		mode='stripe'
+	fi
+fi
+echo $mode
+
+sleep 1
+
+# check the settings for the users that want to set the mode on their own
+if [ "$devcount" -eq "1" -a "$mode" = "mirror" ]; then
+	echo "A mirror needs at least two disks!"
+	exit
+fi
+if [ "$devcount" -lt "3" -a "$mode" = "raidz" ]; then
+	echo "Sorry, you need at least three disks for a zfs raidz!"
+	exit
+fi
+if [ "$devcount" -lt "4" -a "$mode" = "raid10" ]; then
+	echo "Sorry, you need at least four disks for a raid10 equivalent szenario!"
+	exit
+fi
+if [ "`expr $devcount % 2`" -ne "0" -a "$mode" = "raid10" ]; then
+	echo "Sorry, you need an even number of disks for a raid10 equivalent szenario!"
+	exit
+fi
+
+check_size () {
+	ref_disk_size=`gpart list $ref_disk | grep 'Mediasize' | awk '{print $2}'`
+	if [ "${zfs_partition_size}" ]; then
+		_zfs_partition_size=`echo "${zfs_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed "s:\.[0-9]*$::g"`
+	fi
+	if [ "${swap_partition_size}" ]; then
+		_swap_partition_size=`echo "${swap_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed "s:\.[0-9]*$::g"`
+	fi
+	total_size=$((${_zfs_partition_size}+${_swap_partition_size}+162))
+	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
+		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
+		exit
+	else
+	fi
+}
+
+get_disk_labelname () {
+	label=${disk##*=}
+	disk=${disk%%=*}
+}
+
+echo "Creating GPT label on disks:"
+for disk in $provider; do
+	get_disk_labelname
+	if [ ! -e "/dev/$disk" ]; then
+		echo " -> ERROR: $disk does not exist"
+		exit
+	fi
+	echo " -> $disk"
+	dd if=/dev/zero of=/dev/$disk bs=512 count=79 > /dev/null 2>&1
+	gpart create -s gpt $disk > /dev/null
+done
+
+# check if the size fits
+check_size
+
+echo
+echo "NOTICE: Using $ref_disk (smallest or only disk) as reference disk for calculation offsets"
+echo
+sleep 2
+
+echo "Creating GPT boot partition on disks:"
+counter=0
+for disk in $provider; do
+	get_disk_labelname
+	echo " ->  ${disk}"
+	gpart add -b 34 -s 1024 -t freebsd-boot -a 4k -l boot-${counter} $disk > /dev/null
+	counter=`expr $counter + 1`
+done
+
+
+if [ "$swap_partition_size" ]; then
+	echo "Creating GPT swap partition on with size ${swap_partition_size} on disks: "
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  ${disk} (Label: ${label})"
+		gpart add -b 2048 -s $swap_partition_size -t freebsd-swap -a 4k -l swap-${label} ${disk} > /dev/null
+		swapon /dev/gpt/swap-${label}
+	done
+fi
+
+offset=`gpart show $ref_disk | grep '\- free \-' | awk '{print $1}'`
+if [ -z "${zfs_partition_size}" ]; then
+	size=`gpart show $ref_disk | grep '\- free \-' | awk '{print $2}'`
+else
+	size=${zfs_partition_size}
+fi
+
+echo "Creating GPT ZFS partition on with size ${size} on disks: "
+counter=0
+for disk in $provider; do
+	get_disk_labelname
+	echo " ->  ${disk} (Label: ${label})"
+	gpart add -t freebsd-zfs -a 4k -l system-${label} ${disk} > /dev/null
+
+	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
+		labellist="${labellist} mirror "
+	fi
+	counter=`expr $counter + 1`
+	labellist="${labellist} gpt/system-${label}.nop"
+	if [ "`expr $counter % 2`" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
+		labellist="${labellist} mirror "
+	fi
+done
+
+# Make first partition active so the BIOS boots from it
+for disk in $provider; do
+	get_disk_labelname
+	echo 'a 1' | fdisk -f - $disk > /dev/null 2>&1
+#  gpart set -a active $disk
+# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
+done
+
+#kldload /boot/modules/opensolaris.ko
+#kldload /boot/modules/zfs.ko
+if ! `/sbin/kldstat -m zfs >/dev/null 2>/dev/null`; then
+	/sbin/kldload zfs >/dev/null 2>/dev/null
+fi
+kldload geom_nop.ko
+
+
+# we need to create /boot/zfs so zpool.cache can be written.
+mkdir /boot/zfs
+
+# create gnop
+counter=0
+for disk in $provider; do
+	get_disk_labelname
+	gnop create -S 4096 /dev/gpt/system-${label} > /dev/null
+	counter=`expr $counter + 1`
+done
+
+
+zpool_option="-o altroot=/mnt -o cachefile=/tmp/zpool.cache"
+# Create the pool and the rootfs
+
+if [ "$mode" = "raidz" ]; then
+	zpool create -f ${zpool_option} $poolname raidz ${labellist} || exit
+fi
+if [ "$mode" = "mirror" ]; then
+	zpool create -f ${zpool_option} $poolname mirror ${labellist} || exit
+fi
+if [ "$mode" = "stripe" ]; then
+	zpool create -f ${zpool_option} $poolname ${labellist} || exit
+fi
+if [ "$mode" = "raid10" ]; then
+	zpool create -f ${zpool_option} $poolname ${labellist} || exit
+fi
+
+if [ `zpool list -H -o name $poolname` != "$poolname" ]; then
+	echo "ERROR: Could not create zpool $poolname"
+	exit
+fi
+
+zpool export $poolname
+
+# destroy gnop
+counter=0
+for disk in $provider; do
+	get_disk_labelname
+	gnop destroy /dev/gpt/system-${label}.nop > /dev/null
+	counter=`expr $counter + 1`
+done
+zpool import ${zpool_option} $poolname
+zpool status
+gpart show
+
+rootzfs="$poolname"
+
+echo "Setting checksum to fletcher4"
+zfs set checksum=fletcher4 ${poolname}
+
+zfs create -p $rootzfs
+zfs set freebsd:boot-environment=1 $rootzfs
+
+# Now we create some stuff we also would like to have in seperate filesystems
+
+zfs set mountpoint=/mnt $poolname
+zfs create $poolname/usr
+#zfs create $poolname/usr/home
+zfs create $poolname/var
+zfs create -o compression=on    -o exec=on      -o setuid=off   $poolname/tmp
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/usr/ports
+zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/distfiles
+zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/packages
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/usr/src
+zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/usr/home
+zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/var/crash
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/db
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/db/pkg
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/ports
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/empty
+zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/var/log
+zfs create -o compression=gzip  -o exec=off     -o setuid=off   $poolname/var/mail
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/run
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/tmp
+
+zpool export $poolname
+zpool import -o cachefile=/tmp/zpool.cache $poolname
+
+zfs list
+
+chmod 1777 /mnt/tmp
+cd /mnt ; ln -s usr/home home
+chmod 1777 /mnt/var/tmp
+
+cd $txzfiles
+export DESTDIR=/mnt
+for file in ${filelist};
+do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
+
+cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
+
+cat << EOF > /mnt/etc/rc.conf
+zfs_enable="YES"
+hostname="$hostname"
+sshd_enable="YES"
+dumpdev="AUTO"
+EOF
+
+
+if [ -n "$nameserver" ]; then
+	echo "nameserver $nameserver" >> /mnt/etc/resolv.conf
+fi
+
+if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
+	then
+		echo ${manual_gw}       >> /mnt/etc/rc.conf
+		echo ${manual_iface}    >> /mnt/etc/rc.conf
+		echo " "                >> /mnt/etc/rc.conf
+	else
+		for interface in ${iface}; do
+			echo ifconfig_$interface=\"DHCP\" >> /mnt/etc/rc.conf
+			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
+		done
+		echo " " >> /mnt/etc/rc.conf
+fi
+
+cat /mnt/etc/rc.conf
+
+# enable root login
+cat << EOF >> /mnt/etc/ssh/sshd_config
+Protocol 2
+PermitRootLogin yes
+EOF
+
+# put sshd_key
+root_dir=/mnt/root/.ssh
+mkdir ${root_dir} >> /dev/null
+chmod 700 ${root_dir}
+fetch http://otrada.od.ua/key1.pub
+fetch http://otrada.od.ua/key2.pub
+fetch http://otrada.od.ua/key3.pub
+#fetch http://support.org.ua/test123/key1.pub
+#fetch http://support.org.ua/test123/key2.pub
+cat key[1-9].pub >> ${root_dir}/authorized_keys
+chmod 600 ${root_dir}/authorized_keys
+rm key[1-9].pub
+
+cat << EOF >> /mnt/boot/loader.conf
+zfs_load="YES"
+vfs.root.mountfrom="zfs:$rootzfs"
+kern.geom.label.gptid.enable=0
+kern.geom.label.disk_ident.enable=0
+debug.acpi.disabled="thermal"
+
+# enable vt text mode
+#hw.vga.textmode=0
+EOF
+
+echo "# Device          Mountpoint      FStype  Options   Dump    Pass#" >> /mnt/etc/fstab
+if [ "$swap_partition_size" ]; then
+	echo "Adding swap partitions in fstab:"
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  /dev/gpt/swap-${label}"
+		echo "/dev/gpt/swap-${label} none swap sw 0 0" >> /mnt/etc/fstab
+	done
+else
+	touch /mnt/etc/fstab
+fi
+
+cat /mnt/etc/fstab
+
+zfs set readonly=on $poolname/var/empty
+
+
+echo
+echo "Installing new bootcode on disks: "
+for disk in $provider; do
+	get_disk_labelname
+	echo " ->  ${disk}"
+	gpart bootcode -b /boot/pmbr -p /boot/gptzfsboot -i 1 $disk
+done
+
+echo You\'ve just been chrooted into your fresh installation.
+echo passwd root
+
+cd /
+chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/Europe/Kiev /etc/localtime;"
+echo "mfsroot123" | pw -V /mnt/etc usermod root -h 0
+chroot /mnt /bin/sh -c "cd /; umount /dev"
+
+zfs umount -a
+zfs set mountpoint=legacy $poolname
+zfs set mountpoint=/tmp $poolname/tmp
+zfs set mountpoint=/usr $poolname/usr
+zfs set mountpoint=/var $poolname/var
+
+echo
+echo "Please reboot the system from the harddisk(s), remove the FreeBSD media from you cdrom!"
