@@ -1,9 +1,6 @@
 #!/bin/sh
 
-# $Id: go9_4k_HDD.sh,v 1.4 2014/09/26 23:07:43 root Exp $
-# $Author: root $
-# $Source: /home/vlad11/scripts/sh/zfs_go9_4k_HDD/RCS/go9_4k_HDD.sh,v $
-#
+# $Id: go11_4k.sh,v 1.3 2017/03/03 22:56:21 root Exp $
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
 # modifyed with great help of gkontos from http://www.aisecure.net/2011/05/01/root-on-zfs-freebsd-current/
@@ -52,10 +49,10 @@ set -x
 
 txzfiles="/mfs"
 distdir=${txzfiles}"/distdir"
-#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE"
-#ftphost="ftp://ftp.fr.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RELEASE"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
-#ftphost="ftp://ftp5.ru.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE"
+#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/amd64/10.3-RELEASE"
+#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RC2"
+ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
 filelist="base lib32 kernel doc"
 memdisksize=250m
 hostname=core.domain.com
@@ -327,8 +324,7 @@ chmod 1777 /mnt/var/tmp
 
 cd $txzfiles
 export DESTDIR=/mnt
-for file in ${filelist};
-do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
+for file in ${filelist}; 	do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
 
 cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
 

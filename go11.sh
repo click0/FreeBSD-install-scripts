@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# $Id: go9.sh.11,v 1.3 2014/09/26 22:56:21 root Exp $
+# $Id: go11.sh,v 1.3 2017/03/03 22:56:21 root Exp $
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
 # modifyed with great help of gkontos from http://www.aisecure.net/2011/05/01/root-on-zfs-freebsd-current/
@@ -229,14 +229,6 @@ for disk in $provider; do
 # see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
 done
 
-echo
-echo "Installing new bootcode on disks: "
-for disk in $provider; do
-	get_disk_labelname
-	echo " ->  ${disk}"
-	gpart bootcode -b /boot/pmbr -p /boot/gptzfsboot -i 1 $disk
-done
-
 #kldload /boot/modules/opensolaris.ko
 #kldload /boot/modules/zfs.ko
 if ! `/sbin/kldstat -m zfs >/dev/null 2>/dev/null`; then
@@ -297,8 +289,8 @@ zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/po
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/empty
 zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/var/log
 zfs create -o compression=gzip  -o exec=off     -o setuid=off   $poolname/var/mail
-zfs create                      -o exec=off		-o setuid=off   $poolname/var/run
-zfs create -o compression=lz4	-o exec=on		-o setuid=off   $poolname/var/tmp
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/run
+zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/tmp
 
 zpool export $poolname
 zpool import -o cachefile=/tmp/zpool.cache $poolname
