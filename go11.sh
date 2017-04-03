@@ -360,7 +360,7 @@ kern.geom.label.gptid.enable=0
 kern.geom.label.disk_ident.enable=0
 debug.acpi.disabled="thermal"
 
-# enable vt text mode
+## enable vt text mode
 #hw.vga.textmode=0
 EOF
 
