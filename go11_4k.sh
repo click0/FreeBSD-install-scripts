@@ -67,14 +67,16 @@ usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partit
 exerr () { echo -e "$*" >&2 ; exit 1; }
 
 while getopts p:s:S:n:f:m:d: arg
-do case ${arg} in
-	p) provider="$provider ${OPTARG}";;
-	s) swap_partition_size=${OPTARG};;
-	S) zfs_partition_size=${OPTARG};;
-	n) poolname=${OPTARG};;
-	m) mode=${OPTARG};;
-	?) exerr ${usage};;
-esac; done; shift $(( ${OPTIND} - 1 ))
+	do case ${arg} in
+		p) provider="$provider ${OPTARG}";;
+		s) swap_partition_size=${OPTARG};;
+		S) zfs_partition_size=${OPTARG};;
+		n) poolname=${OPTARG};;
+		m) mode=${OPTARG};;
+		?) exerr ${usage};;
+	esac;
+done;
+shift $(( ${OPTIND} - 1 ))
 
 if [ -z "$poolname" ] || [ -z "$provider" ] ; then
 	exerr ${usage}
@@ -84,7 +86,6 @@ fi
 sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
 sysctl vfs.zfs.min_auto_ashift=12
-
 
 #mkdir -p /tmp/bsdinstall_etc
 #echo nameserver $nameserver >/tmp/bsdinstall_etc/resolv.conf
@@ -381,7 +382,7 @@ kern.geom.label.gptid.enable=0
 kern.geom.label.disk_ident.enable=0
 debug.acpi.disabled="thermal"
 
-# enable vt text mode
+## enable vt text mode
 #hw.vga.textmode=0
 EOF
 
