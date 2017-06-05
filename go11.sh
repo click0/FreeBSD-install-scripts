@@ -53,6 +53,7 @@ ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/amd64/10.3-RELEASE"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RC2"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
 filelist="base lib32 kernel doc"
 memdisksize=250m
 hostname=core.domain.com
@@ -365,13 +366,17 @@ debug.acpi.disabled="thermal"
 #hw.vga.textmode=0
 EOF
 
-echo "# Device          Mountpoint      FStype  Options   Dump    Pass#" >> /mnt/etc/fstab
+cat << EOF > /mnt/etc/fstab
+#/etc/fstab
+
+# Device		Mountpoint		FStype		Options   Dump  Pass#
+EOF
 if [ "$swap_partition_size" ]; then
 	echo "Adding swap partitions in fstab:"
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  /dev/gpt/swap-${label}"
-		echo "/dev/gpt/swap-${label} none swap sw 0 0" >> /mnt/etc/fstab
+		echo -e "/dev/gpt/swap-${label}	none	swap	sw	0	0" >> /mnt/etc/fstab
 	done
 else
 	touch /mnt/etc/fstab
