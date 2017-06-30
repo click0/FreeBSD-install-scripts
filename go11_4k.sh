@@ -50,17 +50,18 @@ set -x
 txzfiles="/mfs"
 distdir=${txzfiles}"/distdir"
 ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE"
-#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/amd64/10.3-RELEASE"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RC2"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
 ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
 filelist="base lib32 kernel doc"
 memdisksize=250m
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
+zoneinfo="Europe/Kiev"
 #iface_manual=YES
-#manual_gw='defaultrouter="1.1.1.1"'
-#manual_iface='ifconfig_em0="inet 1.1.1.2/24"'
+#manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
+#manual_iface='ifconfig_em0="inet 1.1.1.2/24"'	# interface IP
 #nameserver="8.8.8.8"
 
 usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
@@ -88,8 +89,7 @@ sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
 sysctl vfs.zfs.min_auto_ashift=12
 
-#mkdir -p /tmp/bsdinstall_etc
-#echo nameserver $nameserver >/tmp/bsdinstall_etc/resolv.conf
+[ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
 
 mkdir $txzfiles
 #mdmfs -s $memdisksize md10 $txzfiles
@@ -98,9 +98,7 @@ newfs -U /dev/md10
 mount /dev/md10 $txzfiles
 
 
-for file in ${filelist}; do
-	(fetch -o $txzfiles/$file.txz $ftphost/$file.txz);
-done
+for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz); done
 
 # count the number of providers
 devcount=`echo ${provider} | wc -w`
@@ -326,7 +324,7 @@ chmod 1777 /mnt/var/tmp
 
 cd $txzfiles
 export DESTDIR=/mnt
-for file in ${filelist}; 	do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
+for file in ${filelist}; do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
 
 cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
 
@@ -338,15 +336,15 @@ dumpdev="AUTO"
 EOF
 
 
-if [ -n "$nameserver" ]; then
-	echo "nameserver $nameserver" >> /mnt/etc/resolv.conf
-fi
+[ -n "$nameserver" ] && echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
 
 if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
 	then
-		echo ${manual_gw}       >> /mnt/etc/rc.conf
-		echo ${manual_iface}    >> /mnt/etc/rc.conf
-		echo " "                >> /mnt/etc/rc.conf
+		cat << EOF >> /mnt/etc/rc.conf
+${manual_gw}
+${manual_iface}
+
+EOF
 	else
 		for interface in ${iface}; do
 			echo ifconfig_$interface=\"DHCP\" >> /mnt/etc/rc.conf
@@ -367,9 +365,11 @@ EOF
 root_dir=/mnt/root/.ssh
 mkdir ${root_dir} >> /dev/null
 chmod 700 ${root_dir}
+# todo for url1
 fetch http://otrada.od.ua/key1.pub
 fetch http://otrada.od.ua/key2.pub
 fetch http://otrada.od.ua/key3.pub
+# todo for url2
 #fetch http://support.org.ua/test123/key1.pub
 #fetch http://support.org.ua/test123/key2.pub
 cat key[1-9].pub >> ${root_dir}/authorized_keys
@@ -385,6 +385,13 @@ debug.acpi.disabled="thermal"
 
 ## enable vt text mode
 #hw.vga.textmode=0
+
+# for Linode Shell
+boot_multicons="YES"
+boot_serial="YES"
+comconsole_speed="115200"
+console="comconsole,vidconsole"
+
 EOF
 
 cat << EOF > /mnt/etc/fstab
@@ -420,7 +427,7 @@ echo You\'ve just been chrooted into your fresh installation.
 echo passwd root
 
 cd /
-chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/Europe/Kiev /etc/localtime;"
+chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/$zoneinfo /etc/localtime;"
 echo "mfsroot123" | pw -V /mnt/etc usermod root -h 0
 chroot /mnt /bin/sh -c "cd /; umount /dev"
 
