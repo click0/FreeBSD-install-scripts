@@ -91,7 +91,7 @@ sysctl vfs.zfs.min_auto_ashift=12
 
 [ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
 
-mkdir $txzfiles
+mkdir $txzfiles || ( txzfiles="/opt$txzfiles"; mkdir -p $txzfiles )	# against read-only FS
 #mdmfs -s $memdisksize md10 $txzfiles
 mdconfig -a -s $memdisksize -u 10
 newfs -U /dev/md10
@@ -165,7 +165,7 @@ for disk in $provider; do
 		exit
 	fi
 	echo " -> $disk"
-	dd if=/dev/zero of=/dev/$disk bs=512 count=79 > /dev/null 2>&1
+	gpart destroy -F $disk > /dev/null
 	gpart create -s gpt $disk > /dev/null
 done
 
@@ -322,9 +322,11 @@ if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_
 		cat << EOF >> /mnt/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
+ifconfig_DEFAULT="SYNCDHCP"
 
 EOF
 	else
+		echo 'ifconfig_DEFAULT="SYNCDHCP"' >> /mnt/etc/rc.conf
 		for interface in ${iface}; do
 			echo ifconfig_$interface=\"DHCP\" >> /mnt/etc/rc.conf
 			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
