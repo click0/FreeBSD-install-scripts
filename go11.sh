@@ -51,13 +51,14 @@ txzfiles="/mfs"
 distdir=${txzfiles}"/distdir"
 ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/10.3-STABLE"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RC2"
-ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.0-STABLE"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
+ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
+#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
+#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
 filelist="base lib32 kernel doc"
 memdisksize=250m
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
+iface=$(ifconfig -l -u | sed -e 's/lo[0-9]//' -e 's/enc[0-9]//' -e 's/gif[0-9]//' -e 's/  / /g')
 zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
@@ -325,12 +326,18 @@ ${manual_iface}
 ifconfig_DEFAULT="SYNCDHCP"
 
 EOF
+		for interface in ${iface}; do
+			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
+		done
+		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
+		echo " " >> /mnt/etc/rc.conf
 	else
 		echo 'ifconfig_DEFAULT="SYNCDHCP"' >> /mnt/etc/rc.conf
 		for interface in ${iface}; do
 			echo ifconfig_$interface=\"DHCP\" >> /mnt/etc/rc.conf
 			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
 		done
+		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
 		echo " " >> /mnt/etc/rc.conf
 fi
 
@@ -374,6 +381,14 @@ comconsole_speed="115200"
 console="comconsole,vidconsole"
 
 EOF
+
+# 4) TTY for serial console
+cat << EOF >> /mnt/etc/ttys
+ttyu1 "/usr/libexec/getty std.9600" vt100 on secure
+EOF
+
+# Options for tmux
+echo "set-option -g history-limit 300000" >> /mnt/root/.tmux.conf
 
 cat << EOF > /mnt/etc/fstab
 #/etc/fstab
