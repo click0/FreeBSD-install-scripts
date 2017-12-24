@@ -414,14 +414,14 @@ echo "set-option -g history-limit 300000" >> /mnt/root/.tmux.conf
 cat << EOF > /mnt/etc/fstab
 #/etc/fstab
 
-# Device		Mountpoint		FStype		Options   Dump  Pass#
+# Device		Mountpoint	FStype		Options	Dump	Pass#
 EOF
 if [ "$swap_partition_size" ]; then
 	echo "Adding swap partitions in fstab:"
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  /dev/gpt/swap-${label}"
-		echo -e "/dev/gpt/swap-${label}	none	swap	sw	0	0" >> /mnt/etc/fstab
+		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >> /mnt/etc/fstab
 	done
 else
 	touch /mnt/etc/fstab
