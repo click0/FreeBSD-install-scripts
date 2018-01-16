@@ -263,35 +263,35 @@ fi
 zpool status
 gpart show
 
-rootzfs="$poolname"
-
 echo "Setting checksum to fletcher4"
-zfs set checksum=fletcher4 ${poolname}
+zfs set checksum=fletcher4 $poolname
+zfs set reservation=50M $poolname
+zfs set compression=lz4 $poolname
 
-zfs create -p $rootzfs
-zfs set freebsd:boot-environment=1 $rootzfs
+zfs create -p $poolname
+zfs set freebsd:boot-environment=1 $poolname
 
-# Now we create some stuff we also would like to have in seperate filesystems
+# Now we create some stuff we also would like to have in separate filesystems
 
 zfs set mountpoint=/mnt $poolname
 zfs create $poolname/usr
 #zfs create $poolname/usr/home
 zfs create $poolname/var
 zfs create -o compression=on    -o exec=on      -o setuid=off   $poolname/tmp
-zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/usr/ports
+zfs create                      -o exec=on      -o setuid=off   $poolname/usr/ports
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/distfiles
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/packages
-zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/usr/src
-zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/usr/home
-zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/var/crash
+zfs create                      -o exec=on      -o setuid=off   $poolname/usr/src
+zfs create                      -o exec=off     -o setuid=off   $poolname/usr/home
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/crash
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/db
-zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/db/pkg
-zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/ports
+zfs create                      -o exec=on      -o setuid=off   $poolname/var/db/pkg
+zfs create                      -o exec=on      -o setuid=off   $poolname/var/ports
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/empty
-zfs create -o compression=lz4   -o exec=off     -o setuid=off   $poolname/var/log
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/log
 zfs create -o compression=gzip  -o exec=off     -o setuid=off   $poolname/var/mail
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/run
-zfs create -o compression=lz4   -o exec=on      -o setuid=off   $poolname/var/tmp
+zfs create                      -o exec=on      -o setuid=off   $poolname/var/tmp
 
 zpool export $poolname
 zpool import -o cachefile=/tmp/zpool.cache $poolname
@@ -366,7 +366,7 @@ rm key[1-9].pub
 
 cat << EOF >> /mnt/boot/loader.conf
 zfs_load="YES"
-vfs.root.mountfrom="zfs:$rootzfs"
+vfs.root.mountfrom="zfs:$poolname"
 kern.geom.label.gptid.enable=0
 kern.geom.label.disk_ident.enable=0
 debug.acpi.disabled="thermal"
