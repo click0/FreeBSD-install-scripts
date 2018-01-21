@@ -4,18 +4,24 @@
 
 # untested
 
+# defined variables
+
+url="http://mfsbsd.vx.sk/files/iso/10/amd64/"
+iso_file="mfsbsd-10.1-RELEASE-amd64.iso"
+dir_tftp="/tftpboot/images/mfsbsd10"
+
 # Mount the ISO, clone its contents, mount the root filesystem
 
-mkdir dist
-fetch -o dist http://mfsbsd.vx.sk/files/iso/10/amd64/mfsbsd-10.1-RELEASE-amd64.iso
-iso_image=dist/mfsbsd-10.1-RELEASE-amd64.iso
-mkdir mfsiso.mnt
+mkdir -p dist
+fetch -o dist $url/$iso_file
+iso_image=dist/$iso_file
+mkdir -p mfsiso.mnt
 mfs_iso_dev=`mdconfig -a -t vnode -f $iso_image`
 mount_cd9660 /dev/$mfs_iso_dev mfsiso.mnt
-mkdir isocontents
+mkdir -p isocontents
 cp -Rp mfsiso.mnt/* isocontents/
 gunzip isocontents/mfsroot.gz
-mkdir mfsroot.mnt
+mkdir -p mfsroot.mnt
 mfs_root_dev=`mdconfig -a -t vnode -f isocontents/mfsroot`
 mount /dev/$mfs_root_dev mfsroot.mnt
 
@@ -57,7 +63,7 @@ gzip isocontents/mfsroot
 boot_sector=`isoinfo -d -i $iso_image | grep Bootoff | awk '{print $3}'`
 dd if=$iso_image bs=2048 count=1 skip=$boot_sector of=isocontents/boot.img
 mkisofs -J -R -no-emul-boot -boot-load-size 4 -b boot.img -o new_image.iso isocontents/
-mv -i new_image.iso /tftpboot/images/mfsbsd10/mfsbsd-10.1-RELEASE-amd64.iso
+mv -i new_image.iso /tftpboot/images/mfsbsd10/$iso_file
 
 #	Clean up
 
