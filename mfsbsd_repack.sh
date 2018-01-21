@@ -31,6 +31,7 @@ mount /dev/$mfs_root_dev mfsroot.mnt
 sed -i '' -e 's/:ht:np:/:al=root:ht:np:/' mfsroot.mnt/etc/gettytab
 ### .login automatic operations ###
 chmod g+w mfsroot.mnt/root/{,.login}
+
 cat > mfsroot.mnt/root/prepare.sh << EOF
 #!/bin/sh
 puppet_server=puppet
@@ -49,9 +50,9 @@ EOF
 
 chmod ug+x mfsroot.mnt/root/prepare.sh
 chown root mfsroot.mnt/root/prepare.sh
-cat > mfsroot.mnt/root/.login <<__eof_login__
+cat > mfsroot.mnt/root/.login << EOF
 /root/prepare.sh \$tty && /root/deploy.sh
-__eof_login__
+EOF
 chmod g-w mfsroot.mnt/root/{,.login}
 echo 'autoboot_delay="2"' >> isocontents/boot/loader.conf
 
