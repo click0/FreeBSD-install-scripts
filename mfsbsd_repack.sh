@@ -14,6 +14,11 @@ iso_file="mfsbsd-se-10.2-RELEASE-amd64.iso"
 dir_tftp="/var/tftp/images/mfsbsd/"
 dir_tmp="/tmp/repack-mfsbsd"
 
+#iface_manual=YES
+#manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
+#manual_iface='ifconfig_em0="inet 1.1.1.2/24"'	# interface IP
+#nameserver="8.8.8.8"
+
 #	Mount the ISO, clone its contents, mount the root filesystem
 
 [ -d $dir_tmp ] && { rmdir -rf $dir_tmp ; }
@@ -31,34 +36,17 @@ mount /dev/$mfs_root_dev mfsroot.mnt || exit
 
 #	Make desired modifications
 
-### autologin ###
-sed -i '' -e 's/:ht:np:/:al=root:ht:np:/' mfsroot.mnt/etc/gettytab
-### .login automatic operations ###
-chmod g+w mfsroot.mnt/root/ mfsroot.mnt/root/.login
+[ -n "$nameserver" ] && echo "nameserver $nameserver" >> mfsroot.mnt/etc/resolv.conf ;
 
-cat > mfsroot.mnt/root/prepare.sh << EOF
-#!/bin/sh
-puppet_server=puppet
-mount_point=/mnt/deploy
-ping_response=-1
-while [ "0" != "\$ping_response" ]; do
-  echo Waiting to let network connections settle ...
-  sleep 1
-  ping -qc 1 \$puppet_server > /dev/null
-  ping_response=\$?
-done
-mkdir -p \$mount_point
-mount \$puppet_server:/usr/exports/deploy \$mount_point
-ln -sf \$mount_point/deploy.sh ./
+if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
+then
+cat << EOF >> mfsroot.mnt/etc/rc.conf
+${manual_gw}
+${manual_iface}
+ifconfig_DEFAULT="SYNCDHCP"
 EOF
 
-chmod ug+x mfsroot.mnt/root/prepare.sh
-chown root mfsroot.mnt/root/prepare.sh
-cat > mfsroot.mnt/root/.login << EOF
-/root/prepare.sh \$tty && /root/deploy.sh
-EOF
-chmod g-w mfsroot.mnt/root/ mfsroot.mnt/root/.login
-echo 'autoboot_delay="2"' >> isocontents/boot/loader.conf
+fi
 
 #	Unmount and repackage the image to a new ISO[1]
 
