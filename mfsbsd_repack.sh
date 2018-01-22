@@ -1,36 +1,40 @@
 #!/bin/sh
 
+#
 # https://gregoryo.wordpress.com/2015/04/15/mfsbsd-tweaks-to-help-automation/
 
-# untested
+# tested
 
-# defined variables
+set -x
+
+#	defined variables
 
 url="http://mfsbsd.vx.sk/files/iso/10/amd64/"
-iso_file="mfsbsd-10.1-RELEASE-amd64.iso"
-dir_tftp="/tftpboot/images/mfsbsd10"
+iso_file="mfsbsd-se-10.2-RELEASE-amd64.iso"
+dir_tftp="/var/tftp/images/mfsbsd/"
+dir_tmp="/tmp/repack-mfsbsd"
 
-# Mount the ISO, clone its contents, mount the root filesystem
+#	Mount the ISO, clone its contents, mount the root filesystem
 
-mkdir -p dist
-fetch -o dist $url/$iso_file
+[ -d $dir_tmp ] && { rmdir -rf $dir_tmp ; }
+mkdir -p $dir_tmp $dir_tmp/dist $dir_tmp/mfsiso.mnt $dir_tmp/isocontents
+cd $dir_tmp
+[ ! -e dist/$iso_file ] && cp $dir_tftp/$iso_file $dir_tmp/dist/ || fetch -o dist $url/$iso_file;
 iso_image=dist/$iso_file
-mkdir -p mfsiso.mnt
 mfs_iso_dev=`mdconfig -a -t vnode -f $iso_image`
-mount_cd9660 /dev/$mfs_iso_dev mfsiso.mnt
-mkdir -p isocontents
+mount_cd9660 /dev/$mfs_iso_dev mfsiso.mnt  || exit
 cp -Rp mfsiso.mnt/* isocontents/
 gunzip isocontents/mfsroot.gz
 mkdir -p mfsroot.mnt
 mfs_root_dev=`mdconfig -a -t vnode -f isocontents/mfsroot`
-mount /dev/$mfs_root_dev mfsroot.mnt
+mount /dev/$mfs_root_dev mfsroot.mnt || exit
 
 #	Make desired modifications
 
 ### autologin ###
 sed -i '' -e 's/:ht:np:/:al=root:ht:np:/' mfsroot.mnt/etc/gettytab
 ### .login automatic operations ###
-chmod g+w mfsroot.mnt/root/{,.login}
+chmod g+w mfsroot.mnt/root/ mfsroot.mnt/root/.login
 
 cat > mfsroot.mnt/root/prepare.sh << EOF
 #!/bin/sh
@@ -53,7 +57,7 @@ chown root mfsroot.mnt/root/prepare.sh
 cat > mfsroot.mnt/root/.login << EOF
 /root/prepare.sh \$tty && /root/deploy.sh
 EOF
-chmod g-w mfsroot.mnt/root/{,.login}
+chmod g-w mfsroot.mnt/root/ mfsroot.mnt/root/.login
 echo 'autoboot_delay="2"' >> isocontents/boot/loader.conf
 
 #	Unmount and repackage the image to a new ISO[1]
@@ -64,7 +68,11 @@ gzip isocontents/mfsroot
 boot_sector=`isoinfo -d -i $iso_image | grep Bootoff | awk '{print $3}'`
 dd if=$iso_image bs=2048 count=1 skip=$boot_sector of=isocontents/boot.img
 mkisofs -J -R -no-emul-boot -boot-load-size 4 -b boot.img -o new_image.iso isocontents/
-mv -i new_image.iso /tftpboot/images/mfsbsd10/$iso_file
+mkdir -p $dir_tftp
+[ -e $dir_tftp/$iso_file-new ] && rm $dir_tftp/$iso_file-new;
+mv -i new_image.iso $dir_tftp/$iso_file-new
+md5 $dir_tftp/$iso_file-new >> $dir_tftp/$iso_file-new.sums.txt
+sha256 $dir_tftp/$iso_file-new >> $dir_tftp/$iso_file-new.sums.txt
 
 #	Clean up
 
@@ -72,3 +80,5 @@ umount mfsiso.mnt
 mdconfig -d -u `echo $mfs_iso_dev | sed 's/md//'`
 rmdir mfsiso.mnt
 rmdir mfsroot.mnt
+
+# rmdir -rf $dir_tmp
