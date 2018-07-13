@@ -68,4 +68,3 @@ apt-get -y install lsb-release || yum install redhat-lsb-core
 [ "$(lsb_release -is)" = "Centos" ] && { install_centos ; exit; }
 
 [ "$(lsb_release -is)" = "RedHat" ] && { install_redhat ; exit; }
-
