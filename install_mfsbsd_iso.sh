@@ -9,23 +9,27 @@ file1_md5=4e5d61dcf87d948f7a832f51062a1fbc
 
 dir1=/boot/images
 
-
-install_debian() {
-
-	apt-get -y install grub-imageboot
+main() {
 
 	#	sudo -s
 
 	mkdir -p $dir1
 	cd $dir1 || exit
-	wget $url1/$file1
+	wget $url2/$file1 || wget $url1/$file1 || ( echo "ISO image not found"; exit; )
 	md5sum $dir1/$file1 | grep ${file1_md5} && echo md5 OK || exit
 
 	update-grub
-	# not work!	#grub-set-default 2 
+	# not work!	#grub-set-default 2
 
 	sed -i'' -e 's/set default="0"/set default="2"/g' /boot/grub/grub.cfg
 	echo reboot!
+
+}
+
+install_debian() {
+
+	apt-get -y install grub-imageboot || exit
+	main
 
 }
 
@@ -39,7 +43,7 @@ install_ubuntu() {
 install_centos() {
 
 	yum install grub-imageboot || exit
-	install_debian
+	main
 
 }
 
