@@ -3,7 +3,13 @@
 url1=http://mfsbsd.vx.sk/files/iso/11/amd64
 url2=http://otrada.od.ua/pub
 file1=mfsbsd-se-11.0-RELEASE-amd64.iso
-file1_md5=4e5d61dcf87d948f7a832f51062a1fbc
+
+case ${file1} in
+	mfsbsd-se-11.0-RELEASE-amd64.iso)	file1_md5=4e5d61dcf87d948f7a832f51062a1fbc ;;
+	mfsbsd-se-11.1-RELEASE-amd64.iso)	file1_md5=6722786b20e641ae4830a0594c37214c ;;
+	mfsbsd-se-11.2-RELEASE-amd64.iso)	file1_md5=f272b36b946d2e0b82666bc01bc7c6a9 ;;
+	?) echo "\$file1_md5 not found!"
+esac
 
 dir1=/boot/images
 
