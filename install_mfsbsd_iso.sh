@@ -1,9 +1,7 @@
 #!/bin/sh
 
 url1=http://mfsbsd.vx.sk/files/iso/11/amd64
-url1=http://otrada.od.ua/pub
-file1=mfsbsd-se-11.1-RELEASE-amd64.iso
-file1_md5=6722786b20e641ae4830a0594c37214c
+url2=http://otrada.od.ua/pub
 file1=mfsbsd-se-11.0-RELEASE-amd64.iso
 file1_md5=4e5d61dcf87d948f7a832f51062a1fbc
 
