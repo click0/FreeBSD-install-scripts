@@ -49,20 +49,21 @@ set -x
 
 txzfiles="/mfs"
 distdir=${txzfiles}"/distdir"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
-#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/11.0-RC2"
+#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.0-ALPHA10"
+ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC2"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
+ftp_mirror_list="ftp6.ua ftp1.fr ftp.de"
 filelist="base lib32 kernel doc"
-memdisksize=250m
+memdisksize=290M
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
 iface=$(ifconfig -l -u | sed -e 's/lo[0-9]//' -e 's/enc[0-9]//' -e 's/gif[0-9]//' -e 's/  / /g')
 zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
-#manual_iface='ifconfig_em0="inet 1.1.1.2/24"'	# interface IP
+#manual_iface='ifconfig_vtnet0="inet 1.1.1.2/24"'	# interface IP
 #nameserver="8.8.8.8"
 
 usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
@@ -92,14 +93,21 @@ sysctl vfs.zfs.min_auto_ashift=12
 
 [ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
 
-mkdir $txzfiles || ( txzfiles="/opt$txzfiles"; mkdir -p $txzfiles )	# against read-only FS
+[ ! -d $txzfiles ] && mkdir $txzfiles || ( txzfiles="/opt$txzfiles"; mkdir -p $txzfiles )	# against read-only FS
 #mdmfs -s $memdisksize md10 $txzfiles
-mdconfig -a -s $memdisksize -u 10
-newfs -U /dev/md10
-mount /dev/md10 $txzfiles
+# check size /dev/md10
+#if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
+if [ -e /dev/md10 ]; then
+	umount /dev/md10 && mdconfig -d -u 10
+fi
+if [ ! -e /dev/md10 ]; then
+	mdconfig -a -s $memdisksize -u 10
+	newfs -U /dev/md10
+	mount /dev/md10 $txzfiles
+fi
 
 
-for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz); done
+for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz || exit 1); done
 
 # count the number of providers
 devcount=`echo ${provider} | wc -w`
@@ -138,18 +146,21 @@ if [ "`expr $devcount % 2`" -ne "0" -a "$mode" = "raid10" ]; then
 fi
 
 check_size () {
-	ref_disk_size=`gpart list $ref_disk | grep 'Mediasize' | awk '{print $2}'`
+	ref_disk_size=`gpart list ${ref_disk} | grep 'Mediasize' | awk '{print $2}'`
 	if [ "${zfs_partition_size}" ]; then
-		_zfs_partition_size=`echo "${zfs_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed "s:\.[0-9]*$::g"`
+		_zfs_partition_size=`echo "${zfs_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed 's:\.[0-9]*$::g'`
 	fi
 	if [ "${swap_partition_size}" ]; then
-		_swap_partition_size=`echo "${swap_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed "s:\.[0-9]*$::g"`
+		_swap_partition_size=`echo "${swap_partition_size}"|awk '{print tolower($0)}'|\
+		sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|\
+ 		bc |sed 's:\.[0-9]*$::g'`
 	fi
 	total_size=$((${_zfs_partition_size}+${_swap_partition_size}+162))
 	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
 		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
-		exit
-	else
+		exit 1
+#	else
+#		echo "unknown status!"
 	fi
 }
 
@@ -163,18 +174,38 @@ for disk in $provider; do
 	get_disk_labelname
 	if [ ! -e "/dev/$disk" ]; then
 		echo " -> ERROR: $disk does not exist"
-		exit
+		exit 1
 	fi
 	echo " -> $disk"
-	gpart destroy -F $disk > /dev/null
+	# against PR 196102
+	if ( gpart show /dev/$disk | egrep -v '=>| - free -|^$' ); then
+		disk_index_list=$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)
+		for disk_index in ${disk_index_list}; do
+			gpart delete -i ${disk_index} /dev/$disk || exit 1
+		done
+	fi
+	gpart destroy -F $disk > /dev/null || exit 1
 	gpart create -s gpt $disk > /dev/null
 done
 
+smallest_disk_size='0'
+echo "Checking disks for size:"
+for disk in $provider; do
+	get_disk_labelname
+	disk_size=`gpart show $disk | grep '\- free \-' | awk '{print $2}'`
+	echo " -> $disk - total size $disk_size"
+	if [ "$smallest_disk_size" -gt "$disk_size" ] || [ "$smallest_disk_size" -eq "0" ]; then
+		smallest_disk_size=$disk_size
+		ref_disk=$disk
+	fi
+done
+
 # check if the size fits
+swap_partition_size=${swap_partition_size:-"0"}
 check_size
 
 echo
-echo "NOTICE: Using $ref_disk (smallest or only disk) as reference disk for calculation offsets"
+echo "NOTICE: Using ${ref_disk} (smallest or only disk) as reference disk for calculation offsets"
 echo
 sleep 2
 
@@ -188,29 +219,27 @@ for disk in $provider; do
 done
 
 
-if [ "$swap_partition_size" ]; then
+if [ "${swap_partition_size}" ]; then
 	echo "Creating GPT swap partition on with size ${swap_partition_size} on disks: "
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s $swap_partition_size -t freebsd-swap -a 4k -l swap-${label} ${disk} > /dev/null
+		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 4k -l swap-${label} ${disk} > /dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
 
-offset=`gpart show $ref_disk | grep '\- free \-' | awk '{print $1}'`
-if [ -z "${zfs_partition_size}" ]; then
-	size=`gpart show $ref_disk | grep '\- free \-' | awk '{print $2}'`
-else
-	size=${zfs_partition_size}
+offset=`gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}'`
+if [ -n "${zfs_partition_size}" ]; then
+	size_string='-s ${zfs_partition_size}'
 fi
 
-echo "Creating GPT ZFS partition on with size ${size} on disks: "
+echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
 counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
-	gpart add -t freebsd-zfs -a 4k -l system-${label} ${disk} > /dev/null
+	gpart add -t freebsd-zfs ${size_string} -a 4k -l system-${label} ${disk} > /dev/null
 
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
@@ -222,24 +251,28 @@ for disk in $provider; do
 	fi
 done
 
+# show list GPT label
+ls -l /dev/gpt/
+
 # Make first partition active so the BIOS boots from it
 for disk in $provider; do
 	get_disk_labelname
 	echo 'a 1' | fdisk -f - $disk > /dev/null 2>&1
-#  gpart set -a active $disk
+# todo
+# gpart set -a active $disk
 # see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
 done
 
-#kldload /boot/modules/opensolaris.ko
-#kldload /boot/modules/zfs.ko
 if ! `/sbin/kldstat -m zfs >/dev/null 2>/dev/null`; then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
 fi
-kldload geom_nop.ko
+if ! `/sbin/kldstat -m g_nop >/dev/null 2>/dev/null`; then
+	/sbin/kldload geom_nop.ko >/dev/null 2>/dev/null
+fi
 
 
 # we need to create /boot/zfs so zpool.cache can be written.
-mkdir /boot/zfs
+[ ! -d /boot/zfs ] && mkdir /boot/zfs
 
 # create gnop
 counter=0
@@ -280,6 +313,7 @@ for disk in $provider; do
 	gnop destroy /dev/gpt/system-${label}.nop > /dev/null
 	counter=`expr $counter + 1`
 done
+ls -l /dev/gpt/
 zpool import ${zpool_option} $poolname
 zpool status
 gpart show
@@ -374,13 +408,15 @@ EOF
 root_dir=/mnt/root/.ssh
 mkdir ${root_dir} >> /dev/null
 chmod 700 ${root_dir}
-# todo for url1
-fetch http://otrada.od.ua/key1.pub
-fetch http://otrada.od.ua/key2.pub
-fetch http://otrada.od.ua/key3.pub
-# todo for url2
-#fetch http://support.org.ua/test123/key1.pub
-#fetch http://support.org.ua/test123/key2.pub
+if ( ping -q -c3 otrada.od.ua  > /dev/null 2>&1 )
+then
+	url_ssh="http://otrada.od.ua"
+else
+	url_ssh="http://support.org.ua/install/test123"
+fi
+for i in $(jot 9); do
+	fetch ${url_ssh}/key$i.pub
+done
 cat key[1-9].pub >> ${root_dir}/authorized_keys
 chmod 600 ${root_dir}/authorized_keys
 rm key[1-9].pub
