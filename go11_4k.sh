@@ -436,9 +436,10 @@ console="comconsole,vidconsole"
 EOF
 
 # 4) TTY for serial console
-cat << EOF >> /mnt/etc/ttys
-ttyu1 "/usr/libexec/getty std.9600" vt100 on secure
-EOF
+# deprecated after FreeBSD 12.0 or high
+#cat << EOF >> /mnt/etc/ttys
+#ttyu1 "/usr/libexec/getty std.9600" vt100 on secure
+#EOF
 
 # Options for tmux
 echo "set-option -g history-limit 300000" >> /mnt/root/.tmux.conf
