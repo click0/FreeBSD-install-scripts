@@ -387,7 +387,7 @@ then
 else
 	url_ssh="http://support.org.ua/install/test123"
 fi
-for i in $(jot 9); do
+for i in $(seq 1 9); do
 	fetch ${url_ssh}/key$i.pub
 done
 cat key[1-9].pub >> ${root_dir}/authorized_keys
