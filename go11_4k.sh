@@ -368,6 +368,7 @@ cat << EOF > /mnt/etc/rc.conf
 zfs_enable="YES"
 hostname="$hostname"
 sshd_enable="YES"
+sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthentication=yes -oProtocol=2 -oUseDNS=no"
 dumpdev="AUTO"
 EOF
 
@@ -398,12 +399,6 @@ EOF
 fi
 
 cat /mnt/etc/rc.conf
-
-# enable root login
-cat << EOF >> /mnt/etc/ssh/sshd_config
-Protocol 2
-PermitRootLogin yes
-EOF
 
 # put sshd_key
 root_dir=/mnt/root/.ssh
