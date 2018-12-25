@@ -48,7 +48,6 @@
 set -x
 
 txzfiles="/mfs"
-distdir=${txzfiles}"/distdir"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.0-ALPHA10"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
@@ -93,12 +92,14 @@ sysctl vfs.zfs.min_auto_ashift=12
 
 [ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
 
-[ ! -d $txzfiles ] && mkdir $txzfiles || ( txzfiles="/opt$txzfiles"; mkdir -p $txzfiles )	# against read-only FS
+[ ! -d $txzfiles ] && mkdir -p $txzfiles
+[ ! -d $txzfiles ] && { txzfiles="/opt$txzfiles"; mkdir -p $txzfiles || exit 1; }
 #mdmfs -s $memdisksize md10 $txzfiles
 # check size /dev/md10
 #if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
 if [ -e /dev/md10 ]; then
-	umount /dev/md10 && mdconfig -d -u 10
+	umount /dev/md10
+	mdconfig -d -u 10
 fi
 if [ ! -e /dev/md10 ]; then
 	mdconfig -a -s $memdisksize -u 10
@@ -357,7 +358,7 @@ chmod 1777 /mnt/tmp
 cd /mnt ; ln -s usr/home home
 chmod 1777 /mnt/var/tmp
 
-cd $txzfiles
+cd $txzfiles || exit 1
 export DESTDIR=/mnt
 for file in ${filelist}; do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
 
@@ -414,7 +415,7 @@ then
 else
 	url_ssh="http://support.org.ua/install/test123"
 fi
-for i in $(jot 9); do
+for i in $(seq 1 9); do
 	fetch ${url_ssh}/key$i.pub
 done
 cat key[1-9].pub >> ${root_dir}/authorized_keys
