@@ -48,6 +48,7 @@
 set -x
 
 txzfiles="/mfs"
+#distdir=${txzfiles}"/distdir"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.0-ALPHA10"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
@@ -64,6 +65,7 @@ zoneinfo="Europe/Kiev"
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
 #manual_iface='ifconfig_vtnet0="inet 1.1.1.2/24"'	# interface IP
 #nameserver="8.8.8.8"
+url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
 usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
 
@@ -185,7 +187,7 @@ for disk in $provider; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
 	fi
-	gpart destroy -F $disk > /dev/null || exit 1
+	gpart destroy -F $disk > /dev/null
 	gpart create -s gpt $disk > /dev/null
 done
 
@@ -232,7 +234,7 @@ fi
 
 offset=`gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}'`
 if [ -n "${zfs_partition_size}" ]; then
-	size_string='-s ${zfs_partition_size}'
+	size_string="-s ${zfs_partition_size}"
 fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
@@ -404,18 +406,17 @@ cat /mnt/etc/rc.conf
 root_dir=/mnt/root/.ssh
 mkdir ${root_dir} >> /dev/null
 chmod 700 ${root_dir}
-if ( ping -q -c3 otrada.od.ua  > /dev/null 2>&1 )
-then
-	url_ssh="http://otrada.od.ua"
-else
-	url_ssh="http://support.org.ua/install/test123"
-fi
-for i in $(seq 1 9); do
-	fetch ${url_ssh}/key$i.pub
+for url in ${url_ssh_key_list} ; do
+	if ( ping -q -c3 $(echo $url | awk -F/ '{print $3;}') > /dev/null 2>&1 ); then
+		for i in $(seq 1 9); do
+			fetch -qo - $url/key$i.pub >> ${root_dir}/authorized_keys;
+		done
+		chmod 600 ${root_dir}/authorized_keys
+		break;
+	else
+		echo "no ping to host $(echo $url | awk -F/ '{print $3;}')"
+	fi
 done
-cat key[1-9].pub >> ${root_dir}/authorized_keys
-chmod 600 ${root_dir}/authorized_keys
-rm key[1-9].pub
 
 cat << EOF >> /mnt/boot/loader.conf
 zfs_load="YES"

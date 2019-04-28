@@ -21,3 +21,6 @@
 
 Эталон
 	mfsbsd-se-11.0-RELEASE-amd64.iso
+	
+Untested
+	https://sysadmin.pm/takeover-sh/
