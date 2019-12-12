@@ -8,6 +8,7 @@ file1=mfsbsd-se-12.0-RELEASE-amd64.iso
 
 hostname="YOURHOSTNAME"
 iface_list="vtnet0 em0"
+need_free_space="250"	# in megabytes!
 
 case ${file1} in
 	mfsbsd-se-11.0-RELEASE-amd64.iso)	file1_md5=4e5d61dcf87d948f7a832f51062a1fbc ;;
@@ -22,15 +23,38 @@ dir1=/boot/images
 network_settings() {
 
 	ip=$(ip addr show | grep "inet\b" | grep -v "\blo" | awk '{print $2}' |\
-	egrep -v "^(10|127\.0|192\.168|172\.16)\." | cut -d/ -f1 | head -1)
+		egrep -v "^(10|127\.0|192\.168|172\.16)\." | cut -d/ -f1 | head -1)
 	ip=${ip:-"127.0.0.1"}
 	ipv6=$(ip addr show | grep "inet6\b" | grep -v "\bscope host" | awk '{print $2}' | egrep -v '^::1|^fe'| head -1)
+	ip_mask_short=$(ip addr show | grep "inet\b" | grep -v "\blo" | awk '{print $2}' |\
+		egrep -v "^(10|127\.0|192\.168|172\.16)\." | cut -d/ -f2 | head -1)
 
 	ip_default=$(ip route | grep default | awk '{print $3;}' | head -1)
 	ip_mask=${ip_mask:-"255.255.255.0"}
 	ip_mask_short=${ip_mask_short:-"24"}
+	[ "${ip_mask_short}" == "32" ] && ip_mask_short=22;
 	ipv6_default=$(ip -6 route | grep default | awk '{print $3;}' | head -1)
 	iface_mac=$(ip link show | grep ether | head -1 | awk '{print $2;}')
+}
+
+check_free_space_boot() {
+	# todo
+	echo Проверяем свободное место на разделе /boot
+
+	if grep /boot /proc/mounts; then
+		if [ "$(df -m /boot | awk '/\// {print $4;}')" -le "${need_free_space}" ] ; then
+			echo "No space in partition /boot!"
+			exit 1;
+		fi
+	else
+		if grep '/ ' /proc/mounts; then
+			if [ "$(df -m / | awk '/\// {print $4;}')" -le "${need_free_space}" ] ; then
+				echo "No space in partition / !"
+				exit 1;
+			fi
+		fi
+	fi
+
 }
 
 main() {
@@ -75,8 +99,8 @@ menuentry "$file1" {
 	set kFreeBSD.mfsbsd.autodhcp="NO"
 #	set kFreeBSD.mfsbsd.interfaces="${iface_list} lo0"
 #	for iface in ${iface_list}; do
-#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet $ip/${ip_mask_short}\"	>> ${file234}
-#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet6 $ipv6\"	>> ${file234}
+#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet $ip/${ip_mask_short}\"
+#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet6 $ipv6\"
 #	done
 	set kFreeBSD.mfsbsd.mac_interfaces="ext1"
 	set kFreeBSD.mfsbsd.ifconfig_ext1_mac="${iface_mac}"
@@ -91,9 +115,13 @@ menuentry "$file1" {
 
 EOF
 
-	sed -i'' -e 's/set default="0"/set default="3"/g' ${file234}
+#	sed -i'' -e 's/set default="0"/set default="3"/g' ${file234}
+	menuentry=$(grep '^menuentry ' ${file234} | wc -l)
+#	[ "$(lsb_release -is)" = "Debian" ] && { $(( $menuentry - 2)); }
+	echo "set default=\"$menuentry\"" >> ${file234}
 
 	echo reboot!
+	check_free_space_boot
 
 }
 
@@ -121,8 +149,11 @@ install_centos() {
 install_redhat() {
 
 	install_centos
+
 }
 
+
+check_free_space_boot
 
 apt-get update || yum update
 apt-get -y install lsb-release || yum install redhat-lsb-core

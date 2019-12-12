@@ -53,7 +53,7 @@ txzfiles="/mfs"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
-#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp.de"
 filelist="base lib32 kernel doc"
 memdisksize=290M
@@ -113,7 +113,7 @@ fi
 for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz || exit 1); done
 
 # count the number of providers
-devcount=`echo ${provider} | wc -w`
+devcount=`echo ${provider} | xargs -n1 | sort -u | xargs | wc -w`
 
 # set our default zpool mirror-mode
 if [ -z "$mode" ]; then
@@ -217,7 +217,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
-	gpart add -b 34 -s 1024 -t freebsd-boot -l boot-${counter} $disk > /dev/null
+	gpart add -s 1024 -t freebsd-boot -l boot-${counter} $disk > /dev/null
 	counter=`expr $counter + 1`
 done
 
@@ -455,7 +455,7 @@ echo passwd root
 
 cd /
 chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/$zoneinfo /etc/localtime;"
-echo "mfsroot123" | pw -V /mnt/etc usermod root -h 0
+echo 'mfsroot123' | pw -V /mnt/etc usermod root -h 0
 chroot /mnt /bin/sh -c "cd /; umount /dev"
 
 zfs umount -a

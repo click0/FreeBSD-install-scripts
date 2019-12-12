@@ -53,7 +53,7 @@ txzfiles="/mfs"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
-#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/releases/amd64/11.1-BETA3"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp.de"
 filelist="base lib32 kernel doc"
 memdisksize=290M
@@ -64,7 +64,9 @@ zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
 #manual_iface='ifconfig_vtnet0="inet 1.1.1.2/24"'	# interface IP
-#nameserver="8.8.8.8"
+#nameserver="8.8.8.8"							# single nameserver
+#manual_gw_v6='ipv6_defaultrouter="2001:41d0:0005:1000::1"'			# gateway IP
+#manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
 url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
 usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
@@ -113,7 +115,7 @@ fi
 for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz || exit 1); done
 
 # count the number of providers
-devcount=`echo ${provider} | wc -w`
+devcount=`echo ${provider} | xargs -n1 | sort -u | xargs | wc -w`
 
 # set our default zpool mirror-mode
 if [ -z "$mode" ]; then
@@ -217,7 +219,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
-	gpart add -b 34 -s 1024 -t freebsd-boot -a 4k -l boot-${counter} $disk > /dev/null
+	gpart add -s 1024 -t freebsd-boot -a 4k -l boot-${counter} $disk > /dev/null
 	counter=`expr $counter + 1`
 done
 
@@ -317,6 +319,7 @@ for disk in $provider; do
 	counter=`expr $counter + 1`
 done
 ls -l /dev/gpt/
+sleep 15
 zpool import ${zpool_option} $poolname
 zpool status
 gpart show
@@ -390,6 +393,13 @@ EOF
 		done
 		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
 		echo " " >> /mnt/etc/rc.conf
+		if [ -n "${manual_gw_v6}" ] && [ -n "${manual_iface_v6}" ]; then
+			cat << EOF >> /mnt/etc/rc.conf
+${manual_gw_v6}
+${manual_iface_v6}
+
+EOF
+		fi
 	else
 		echo 'ifconfig_DEFAULT="SYNCDHCP"' >> /mnt/etc/rc.conf
 		for interface in ${iface}; do
@@ -479,7 +489,7 @@ echo passwd root
 
 cd /
 chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/$zoneinfo /etc/localtime;"
-echo "mfsroot123" | pw -V /mnt/etc usermod root -h 0
+echo 'mfsroot123' | pw -V /mnt/etc usermod root -h 0
 chroot /mnt /bin/sh -c "cd /; umount /dev"
 
 zfs umount -a
