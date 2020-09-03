@@ -50,16 +50,16 @@ set -x
 txzfiles="/mfs"
 #distdir=${txzfiles}"/distdir"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.0-ALPHA10"
-ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
-#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-STABLE"
+ftphost="ftp://ftp1.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
+#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
 ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
-ftp_mirror_list="ftp6.ua ftp1.fr ftp.de"
+ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
 filelist="base lib32 kernel doc"
-memdisksize=290M
+memdisksize=310M
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
-iface=$(ifconfig -l -u | sed -e 's/lo[0-9]//' -e 's/enc[0-9]//' -e 's/gif[0-9]//' -e 's/  / /g')
+iface=$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')
 zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
@@ -331,6 +331,7 @@ zfs set compression=lz4 $poolname
 
 zfs create -p $poolname
 zfs set freebsd:boot-environment=1 $poolname
+#zpool set bootfs=$poolname $poolname
 
 # Now we create some stuff we also would like to have in separate filesystems
 
