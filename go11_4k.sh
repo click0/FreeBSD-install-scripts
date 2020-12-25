@@ -286,6 +286,8 @@ for disk in $provider; do
 	gnop create -S 8192 /dev/gpt/system-${label} > /dev/null
 	counter=`expr $counter + 1`
 done
+# Show gnop output
+gnop list
 
 
 zpool_option="-o altroot=/mnt -o cachefile=/tmp/zpool.cache"
