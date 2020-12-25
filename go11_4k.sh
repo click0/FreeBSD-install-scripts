@@ -92,7 +92,7 @@ fi
 
 sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
-sysctl vfs.zfs.min_auto_ashift=12
+sysctl vfs.zfs.min_auto_ashift=13
 
 [ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
 
@@ -219,7 +219,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
-	gpart add -s 1024 -t freebsd-boot -a 4k -l boot-${counter} $disk > /dev/null
+	gpart add -s 1024 -t freebsd-boot -a 8k -l boot-${counter} $disk > /dev/null
 	counter=`expr $counter + 1`
 done
 
@@ -229,7 +229,7 @@ if [ "${swap_partition_size}" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 4k -l swap-${label} ${disk} > /dev/null
+		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 8k -l swap-${label} ${disk} > /dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
@@ -244,7 +244,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
-	gpart add -t freebsd-zfs ${size_string} -a 4k -l system-${label} ${disk} > /dev/null
+	gpart add -t freebsd-zfs ${size_string} -a 8k -l system-${label} ${disk} > /dev/null
 
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
@@ -283,7 +283,7 @@ fi
 counter=0
 for disk in $provider; do
 	get_disk_labelname
-	gnop create -S 4096 /dev/gpt/system-${label} > /dev/null
+	gnop create -S 8192 /dev/gpt/system-${label} > /dev/null
 	counter=`expr $counter + 1`
 done
 
