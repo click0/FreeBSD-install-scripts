@@ -1,20 +1,42 @@
 #!/bin/sh
 
-url1=http://mfsbsd.vx.sk/files/iso/11/amd64
-url1=http://mfsbsd.vx.sk/files/iso/12/amd64
-url2=http://otrada.od.ua/pub
-file1=mfsbsd-se-11.0-RELEASE-amd64.iso
-file1=mfsbsd-se-12.0-RELEASE-amd64.iso
+# Current Version: 1.01
 
-hostname="YOURHOSTNAME"
-iface_list="vtnet0 em0"
-need_free_space="250"	# in megabytes!
+# Copyright
+# Vladislav V. Prodan <github.com/click0>
+# https://support.od.ua
+# 2018-2021
+
+# syntax
+# script_name.sh 13.0 <hostname> fxp0 250
+
+mfsbsd_version_default="12.2" # or 12
+hostname_default="YOURHOSTNAME"
+iface_list_default="vtnet0 em0"
+need_free_space_default="250"	# in megabytes!
+
+
+mfsbsd_version=${1:-${mfsbsd_version_default}}
+
+if [ "${mfsbsd_version}" == "${mfsbsd_version%.*}" ]; then
+  mfsbsd_version=${mfsbsd_version}".0"
+fi
+
+url1=http://mfsbsd.vx.sk/files/iso/${mfsbsd_version%.*}/amd64
+url2=http://otrada.od.ua/pub
+file1=mfsbsd-se-${mfsbsd_version}-RELEASE-amd64.iso
+
+hostname=${2:-${hostname_default}}
+iface_list=${3:-${iface_list_default}}
+need_free_space=${4:-${need_free_space_default}}
 
 case ${file1} in
 	mfsbsd-se-11.0-RELEASE-amd64.iso)	file1_md5=4e5d61dcf87d948f7a832f51062a1fbc ;;
 	mfsbsd-se-11.1-RELEASE-amd64.iso)	file1_md5=6722786b20e641ae4830a0594c37214c ;;
 	mfsbsd-se-11.2-RELEASE-amd64.iso)	file1_md5=f272b36b946d2e0b82666bc01bc7c6a9 ;;
 	mfsbsd-se-12.0-RELEASE-amd64.iso)	file1_md5=e44a55d9682dcd250433313ebc32f4ca ;;
+	mfsbsd-se-12.2-RELEASE-amd64.iso)	file1_md5=556d9194563377c404c935749651ef71 ;;
+	mfsbsd-se-13.0-RELEASE-amd64.iso)	file1_md5=06cae0e6e18cc05bf913b519fd1de130 ;;
 	?) echo "Variable \${file1_md5} not found!" ;;
 esac
 
@@ -35,13 +57,14 @@ network_settings() {
 	[ "${ip_mask_short}" == "32" ] && ip_mask_short=22;
 	ipv6_default=$(ip -6 route | grep default | awk '{print $3;}' | head -1)
 	iface_mac=$(ip link show | grep ether | head -1 | awk '{print $2;}')
+
 }
 
 check_free_space_boot() {
-	# todo
+
 	echo Проверяем свободное место на разделе /boot
 
-	if grep /boot /proc/mounts; then
+	if grep -q /boot /proc/mounts; then
 		if [ "$(df -m /boot | awk '/\// {print $4;}')" -le "${need_free_space}" ] ; then
 			echo "No space in partition /boot!"
 			exit 1;
