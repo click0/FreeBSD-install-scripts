@@ -69,7 +69,7 @@ zoneinfo="Europe/Kiev"
 #manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
 url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
-usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
+usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
 
 exerr () { echo -e "$*" >&2 ; exit 1; }
 
@@ -358,7 +358,7 @@ zfs create                      -o exec=off     -o setuid=off   $poolname/var/ru
 zfs create                      -o exec=on      -o setuid=off   $poolname/var/tmp
 
 zpool export $poolname
-zpool import -o cachefile=/tmp/zpool.cache $poolname
+zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 
 zfs list
 
@@ -380,8 +380,11 @@ sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthenti
 dumpdev="AUTO"
 EOF
 
-
-[ -n "$nameserver" ] && echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
+# apply DNS settings
+[ -n "$nameserver" ] && { echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
+	echo "nameserver \"$nameserver\"" >> /mnt/etc/resolvconf.conf;
+	resolvconf -u;
+}
 
 if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
 	then
@@ -447,7 +450,20 @@ boot_serial="YES"
 comconsole_speed="115200"
 console="comconsole,vidconsole"
 
+## Minimize mode
+#beastie_disable="YES"
+#autoboot_delay="-1"
+
 EOF
+
+# If the memory is 3GB or less, then we reduce the allocated memory for ZFS
+if [ "$(sysctl -n hw.realmem)" -lt "$(( (3 * 1024 * 1024 * 1024) + 2000 ))" ]; then
+	cat << EOF >> /mnt/boot/loader.conf
+# with 1-3 GB Memory
+vfs.zfs.arc_max="200M"
+#
+EOF
+fi
 
 # 4) TTY for serial console
 # deprecated after FreeBSD 12.0 or high
@@ -501,5 +517,7 @@ zfs set mountpoint=/tmp $poolname/tmp
 zfs set mountpoint=/usr $poolname/usr
 zfs set mountpoint=/var $poolname/var
 
+echo zpool status:
+zpool status
 echo
 echo "Please reboot the system from the harddisk(s), remove the FreeBSD media from you cdrom!"

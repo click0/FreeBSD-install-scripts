@@ -53,10 +53,10 @@ txzfiles="/mfs"
 ftphost="ftp://ftp1.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
 #ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
 #ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.2-STABLE"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
 filelist="base lib32 kernel doc"
-memdisksize=310M
+memdisksize=350M
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
 iface=$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')
@@ -64,10 +64,12 @@ zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
 #manual_iface='ifconfig_vtnet0="inet 1.1.1.2/24"'	# interface IP
-#nameserver="8.8.8.8"
+#nameserver="8.8.8.8"							# single nameserver
+#manual_gw_v6='ipv6_defaultrouter="2001:41d0:0005:1000::1"'			# gateway IP
+#manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
 url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
-usage="Usage: go11.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
+usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
 
 exerr () { echo -e "$*" >&2 ; exit 1; }
 
@@ -304,6 +306,7 @@ zfs set compression=lz4 $poolname
 
 zfs create -p $poolname
 zfs set freebsd:boot-environment=1 $poolname
+#zpool set bootfs=$poolname $poolname
 
 # Now we create some stuff we also would like to have in separate filesystems
 
@@ -328,7 +331,7 @@ zfs create                      -o exec=off     -o setuid=off   $poolname/var/ru
 zfs create                      -o exec=on      -o setuid=off   $poolname/var/tmp
 
 zpool export $poolname
-zpool import -o cachefile=/tmp/zpool.cache $poolname
+zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 
 zfs list
 
@@ -350,8 +353,11 @@ sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthenti
 dumpdev="AUTO"
 EOF
 
-
-[ -n "$nameserver" ] && echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
+# apply DNS settings
+[ -n "$nameserver" ] && { echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
+	echo "nameserver \"$nameserver\"" >> /mnt/etc/resolvconf.conf;
+	resolvconf -u;
+}
 
 if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
 	then
@@ -366,6 +372,13 @@ EOF
 		done
 		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
 		echo " " >> /mnt/etc/rc.conf
+		if [ -n "${manual_gw_v6}" ] && [ -n "${manual_iface_v6}" ]; then
+			cat << EOF >> /mnt/etc/rc.conf
+${manual_gw_v6}
+${manual_iface_v6}
+
+EOF
+		fi
 	else
 		echo 'ifconfig_DEFAULT="SYNCDHCP"' >> /mnt/etc/rc.conf
 		for interface in ${iface}; do
@@ -410,7 +423,20 @@ boot_serial="YES"
 comconsole_speed="115200"
 console="comconsole,vidconsole"
 
+## Minimize mode
+#beastie_disable="YES"
+#autoboot_delay="-1"
+
 EOF
+
+# If the memory is 3GB or less, then we reduce the allocated memory for ZFS
+if [ "$(sysctl -n hw.realmem)" -lt "$(( (3 * 1024 * 1024 * 1024) + 2000 ))" ]; then
+	cat << EOF >> /mnt/boot/loader.conf
+# with 1-3 GB Memory
+vfs.zfs.arc_max="200M"
+#
+EOF
+fi
 
 # 4) TTY for serial console
 # deprecated after FreeBSD 12.0 or high
@@ -464,5 +490,7 @@ zfs set mountpoint=/tmp $poolname/tmp
 zfs set mountpoint=/usr $poolname/usr
 zfs set mountpoint=/var $poolname/var
 
+echo zpool status:
+zpool status
 echo
 echo "Please reboot the system from the harddisk(s), remove the FreeBSD media from you cdrom!"
