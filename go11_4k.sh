@@ -47,16 +47,13 @@
 
 set -x
 
-txzfiles="/mfs"
-#distdir=${txzfiles}"/distdir"
-#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.0-ALPHA10"
-ftphost="ftp://ftp1.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.0-RC3"
-#ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.1-STABLE"
-#ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/11.1-PRERELEASE"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/12.2-STABLE"
+distdir="/mfs"
+ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
+ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/13.0-STABLE/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
 filelist="base lib32 kernel doc"
 memdisksize=350M
+memdisknumber=10
 hostname=core.domain.com
 iface="em0 em1 re0 igb0 vtnet0"
 iface=$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')
@@ -69,23 +66,29 @@ zoneinfo="Europe/Kiev"
 #manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
 url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
-usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode>"
+usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode> -d <distdir> -f <ftphost>"
 
-exerr () { echo -e "$*" >&2 ; exit 1; }
+exerr() {
+	echo -e "$*" >&2
+	exit 1
+}
 
-while getopts p:s:S:n:f:m:d: arg
-	do case ${arg} in
-		p) provider="$provider ${OPTARG}";;
-		s) swap_partition_size=${OPTARG};;
-		S) zfs_partition_size=${OPTARG};;
-		n) poolname=${OPTARG};;
-		m) mode=${OPTARG};;
-		?) exerr ${usage};;
-	esac;
-done;
-shift $(( ${OPTIND} - 1 ))
+while getopts p:s:S:n:f:m:d:z: arg; do
+	case ${arg} in
+	p) provider="$provider ${OPTARG}" ;;
+	s) swap_partition_size=${OPTARG} ;;
+	S) zfs_partition_size=${OPTARG} ;;
+	n) poolname=${OPTARG} ;;
+	f) ftphost=${OPTARG} ;;
+	m) mode=${OPTARG} ;;
+	d) distdir=${OPTARG} ;;
+	z) zoneinfo=${OPTARG} ;;
+	?) exerr ${usage} ;;
+	esac
+done
+shift $((${OPTIND} - 1))
 
-if [ -z "$poolname" ] || [ -z "$provider" ] ; then
+if [ -z "$poolname" ] || [ -z "$provider" ]; then
 	exerr ${usage}
 	exit
 fi
@@ -94,28 +97,33 @@ sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
 sysctl vfs.zfs.min_auto_ashift=13
 
-[ -n "$nameserver" ] && { mkdir -p /tmp/bsdinstall_etc ; echo 'nameserver $nameserver' > /tmp/bsdinstall_etc/resolv.conf ; }
+[ -n "$nameserver" ] && {
+	mkdir -p /tmp/bsdinstall_etc
+	echo 'nameserver $nameserver' >/tmp/bsdinstall_etc/resolv.conf
+}
 
-[ ! -d $txzfiles ] && mkdir -p $txzfiles
-[ ! -d $txzfiles ] && { txzfiles="/opt$txzfiles"; mkdir -p $txzfiles || exit 1; }
-#mdmfs -s $memdisksize md10 $txzfiles
+[ ! -d $distdir ] && mkdir -p $distdir
+[ ! -d $distdir ] && {
+	distdir="/opt$distdir"
+	mkdir -p $distdir || exit 1
+}
+#mdmfs -s $memdisksize md10 $distdir
 # check size /dev/md10
 #if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
-if [ -e /dev/md10 ]; then
-	umount /dev/md10
-	mdconfig -d -u 10
+if [ -e "/dev/md$memdisknumber" ]; then
+	umount /dev/md$memdisknumber
+	mdconfig -d -u $memdisknumber
 fi
-if [ ! -e /dev/md10 ]; then
-	mdconfig -a -s $memdisksize -u 10
-	newfs -U /dev/md10
-	mount /dev/md10 $txzfiles
+if [ ! -e "/dev/md$memdisknumber" ]; then
+	mdconfig -a -s $memdisksize -u $memdisknumber
+	newfs -U /dev/md$memdisknumber
+	mount /dev/md$memdisknumber $distdir
 fi
 
-
-for file in ${filelist}; do (fetch -o $txzfiles/$file.txz $ftphost/$file.txz || exit 1); done
+for file in ${filelist}; do (fetch -o $distdir/$file.txz $ftphost/$file.txz || exit 1); done
 
 # count the number of providers
-devcount=`echo ${provider} | xargs -n1 | sort -u | xargs | wc -w`
+devcount=$(echo ${provider} | xargs -n1 | sort -u | xargs | wc -w)
 
 # set our default zpool mirror-mode
 if [ -z "$mode" ]; then
@@ -145,22 +153,22 @@ if [ "$devcount" -lt "4" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need at least four disks for a raid10 equivalent szenario!"
 	exit
 fi
-if [ "`expr $devcount % 2`" -ne "0" -a "$mode" = "raid10" ]; then
+if [ "$(expr $devcount % 2)" -ne "0" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need an even number of disks for a raid10 equivalent szenario!"
 	exit
 fi
 
-check_size () {
-	ref_disk_size=`gpart list ${ref_disk} | grep 'Mediasize' | awk '{print $2}'`
+check_size() {
+	ref_disk_size=$(gpart list ${ref_disk} | grep 'Mediasize' | awk '{print $2}')
 	if [ "${zfs_partition_size}" ]; then
-		_zfs_partition_size=`echo "${zfs_partition_size}"|awk '{print tolower($0)}'|sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|bc |sed 's:\.[0-9]*$::g'`
+		_zfs_partition_size=$(echo "${zfs_partition_size}" | awk '{print tolower($0)}' | sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": | bc | sed 's:\.[0-9]*$::g')
 	fi
 	if [ "${swap_partition_size}" ]; then
-		_swap_partition_size=`echo "${swap_partition_size}"|awk '{print tolower($0)}'|\
-		sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*":|\
- 		bc |sed 's:\.[0-9]*$::g'`
+		_swap_partition_size=$(echo "${swap_partition_size}" | awk '{print tolower($0)}' |
+			sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": |
+			bc | sed 's:\.[0-9]*$::g')
 	fi
-	total_size=$((${_zfs_partition_size}+${_swap_partition_size}+162))
+	total_size=$((${_zfs_partition_size} + ${_swap_partition_size} + 162))
 	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
 		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
 		exit 1
@@ -169,7 +177,7 @@ check_size () {
 	fi
 }
 
-get_disk_labelname () {
+get_disk_labelname() {
 	label=${disk##*=}
 	disk=${disk%%=*}
 }
@@ -183,21 +191,21 @@ for disk in $provider; do
 	fi
 	echo " -> $disk"
 	# against PR 196102
-	if ( gpart show /dev/$disk | egrep -v '=>| - free -|^$' ); then
+	if (gpart show /dev/$disk | egrep -v '=>| - free -|^$'); then
 		disk_index_list=$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)
 		for disk_index in ${disk_index_list}; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
 	fi
-	gpart destroy -F $disk > /dev/null
-	gpart create -s gpt $disk > /dev/null
+	gpart destroy -F $disk >/dev/null
+	gpart create -s gpt $disk >/dev/null
 done
 
 smallest_disk_size='0'
 echo "Checking disks for size:"
 for disk in $provider; do
 	get_disk_labelname
-	disk_size=`gpart show $disk | grep '\- free \-' | awk '{print $2}'`
+	disk_size=$(gpart show $disk | grep '\- free \-' | awk '{print $2}')
 	echo " -> $disk - total size $disk_size"
 	if [ "$smallest_disk_size" -gt "$disk_size" ] || [ "$smallest_disk_size" -eq "0" ]; then
 		smallest_disk_size=$disk_size
@@ -219,22 +227,21 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
-	gpart add -s 1024 -t freebsd-boot -a 8k -l boot-${counter} $disk > /dev/null
-	counter=`expr $counter + 1`
+	gpart add -s 1024 -t freebsd-boot -a 8k -l boot-${counter} $disk >/dev/null
+	counter=$(expr $counter + 1)
 done
-
 
 if [ "${swap_partition_size}" ]; then
 	echo "Creating GPT swap partition on with size ${swap_partition_size} on disks: "
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 8k -l swap-${label} ${disk} > /dev/null
+		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 8k -l swap-${label} ${disk} >/dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
 
-offset=`gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}'`
+offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
 if [ -n "${zfs_partition_size}" ]; then
 	size_string="-s ${zfs_partition_size}"
 fi
@@ -244,14 +251,14 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
-	gpart add -t freebsd-zfs ${size_string} -a 8k -l system-${label} ${disk} > /dev/null
+	gpart add -t freebsd-zfs ${size_string} -a 8k -l system-${label} ${disk} >/dev/null
 
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
-	counter=`expr $counter + 1`
+	counter=$(expr $counter + 1)
 	labellist="${labellist} gpt/system-${label}.nop"
-	if [ "`expr $counter % 2`" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
+	if [ "$(expr $counter % 2)" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
 done
@@ -262,19 +269,18 @@ ls -l /dev/gpt/
 # Make first partition active so the BIOS boots from it
 for disk in $provider; do
 	get_disk_labelname
-	echo 'a 1' | fdisk -f - $disk > /dev/null 2>&1
-# todo
-# gpart set -a active $disk
-# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
+	echo 'a 1' | fdisk -f - $disk >/dev/null 2>&1
+	# todo
+	# gpart set -a active $disk
+	# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
 done
 
-if ! `/sbin/kldstat -m zfs >/dev/null 2>/dev/null`; then
+if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
 fi
-if ! `/sbin/kldstat -m g_nop >/dev/null 2>/dev/null`; then
+if ! $(/sbin/kldstat -m g_nop >/dev/null 2>/dev/null); then
 	/sbin/kldload geom_nop.ko >/dev/null 2>/dev/null
 fi
-
 
 # we need to create /boot/zfs so zpool.cache can be written.
 [ ! -d /boot/zfs ] && mkdir /boot/zfs
@@ -283,12 +289,11 @@ fi
 counter=0
 for disk in $provider; do
 	get_disk_labelname
-	gnop create -S 8192 /dev/gpt/system-${label} > /dev/null
-	counter=`expr $counter + 1`
+	gnop create -S 8192 /dev/gpt/system-${label} >/dev/null
+	counter=$(expr $counter + 1)
 done
 # Show gnop output
 gnop list
-
 
 zpool_option="-o altroot=/mnt -o cachefile=/tmp/zpool.cache"
 # Create the pool and the rootfs
@@ -306,7 +311,7 @@ if [ "$mode" = "raid10" ]; then
 	zpool create -f ${zpool_option} $poolname ${labellist} || exit
 fi
 
-if [ `zpool list -H -o name $poolname` != "$poolname" ]; then
+if [ $(zpool list -H -o name $poolname) != "$poolname" ]; then
 	echo "ERROR: Could not create zpool $poolname"
 	exit
 fi
@@ -317,8 +322,8 @@ zpool export $poolname
 counter=0
 for disk in $provider; do
 	get_disk_labelname
-	gnop destroy /dev/gpt/system-${label}.nop > /dev/null
-	counter=`expr $counter + 1`
+	gnop destroy /dev/gpt/system-${label}.nop >/dev/null
+	counter=$(expr $counter + 1)
 done
 ls -l /dev/gpt/
 sleep 15
@@ -363,16 +368,17 @@ zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 zfs list
 
 chmod 1777 /mnt/tmp
-cd /mnt ; ln -s usr/home home
+cd /mnt
+ln -s usr/home home
 chmod 1777 /mnt/var/tmp
 
-cd $txzfiles || exit 1
+cd $distdir || exit 1
 export DESTDIR=/mnt
 for file in ${filelist}; do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
 
 cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
 
-cat << EOF > /mnt/etc/rc.conf
+cat <<EOF >/mnt/etc/rc.conf
 zfs_enable="YES"
 hostname="$hostname"
 sshd_enable="YES"
@@ -381,60 +387,60 @@ dumpdev="AUTO"
 EOF
 
 # apply DNS settings
-[ -n "$nameserver" ] && { echo "nameserver $nameserver" >> /mnt/etc/resolv.conf ;
-	echo "nameserver \"$nameserver\"" >> /mnt/etc/resolvconf.conf;
-	resolvconf -u;
+[ -n "$nameserver" ] && {
+	echo "nameserver $nameserver" >>/mnt/etc/resolv.conf
+	echo "nameserver \"$nameserver\"" >>/mnt/etc/resolvconf.conf
+	resolvconf -u
 }
 
-if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ];
-	then
-		cat << EOF >> /mnt/etc/rc.conf
+if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ]; then
+	cat <<EOF >>/mnt/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
 ifconfig_DEFAULT="SYNCDHCP"
 
 EOF
-		for interface in ${iface}; do
-			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
-		done
-		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
-		echo " " >> /mnt/etc/rc.conf
-		if [ -n "${manual_gw_v6}" ] && [ -n "${manual_iface_v6}" ]; then
-			cat << EOF >> /mnt/etc/rc.conf
+	for interface in ${iface}; do
+		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
+	done
+	echo ipv6_activate_all_interfaces=\"YES\" >>/mnt/etc/rc.conf
+	echo " " >>/mnt/etc/rc.conf
+	if [ -n "${manual_gw_v6}" ] && [ -n "${manual_iface_v6}" ]; then
+		cat <<EOF >>/mnt/etc/rc.conf
 ${manual_gw_v6}
 ${manual_iface_v6}
 
 EOF
-		fi
-	else
-		echo 'ifconfig_DEFAULT="SYNCDHCP"' >> /mnt/etc/rc.conf
-		for interface in ${iface}; do
-			echo ifconfig_$interface=\"DHCP\" >> /mnt/etc/rc.conf
-			echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >> /mnt/etc/rc.conf
-		done
-		echo ipv6_activate_all_interfaces=\"YES\" >> /mnt/etc/rc.conf
-		echo " " >> /mnt/etc/rc.conf
+	fi
+else
+	echo 'ifconfig_DEFAULT="SYNCDHCP"' >>/mnt/etc/rc.conf
+	for interface in ${iface}; do
+		echo ifconfig_$interface=\"DHCP\" >>/mnt/etc/rc.conf
+		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
+	done
+	echo ipv6_activate_all_interfaces=\"YES\" >>/mnt/etc/rc.conf
+	echo " " >>/mnt/etc/rc.conf
 fi
 
 cat /mnt/etc/rc.conf
 
 # put sshd_key
 root_dir=/mnt/root/.ssh
-mkdir ${root_dir} >> /dev/null
+mkdir ${root_dir} >>/dev/null
 chmod 700 ${root_dir}
-for url in ${url_ssh_key_list} ; do
-	if ( ping -q -c3 $(echo $url | awk -F/ '{print $3;}') > /dev/null 2>&1 ); then
+for url in ${url_ssh_key_list}; do
+	if (ping -q -c3 $(echo $url | awk -F/ '{print $3;}') >/dev/null 2>&1); then
 		for i in $(seq 1 9); do
-			fetch -qo - $url/key$i.pub >> ${root_dir}/authorized_keys;
+			fetch -qo - $url/key$i.pub >>${root_dir}/authorized_keys
 		done
 		chmod 600 ${root_dir}/authorized_keys
-		break;
+		break
 	else
 		echo "no ping to host $(echo $url | awk -F/ '{print $3;}')"
 	fi
 done
 
-cat << EOF >> /mnt/boot/loader.conf
+cat <<EOF >>/mnt/boot/loader.conf
 zfs_load="YES"
 vfs.root.mountfrom="zfs:$poolname"
 kern.geom.label.gptid.enable=0
@@ -457,8 +463,8 @@ console="comconsole,vidconsole"
 EOF
 
 # If the memory is 3GB or less, then we reduce the allocated memory for ZFS
-if [ "$(sysctl -n hw.realmem)" -lt "$(( (3 * 1024 * 1024 * 1024) + 2000 ))" ]; then
-	cat << EOF >> /mnt/boot/loader.conf
+if [ "$(sysctl -n hw.realmem)" -lt "$(((3 * 1024 * 1024 * 1024) + 2000))" ]; then
+	cat <<EOF >>/mnt/boot/loader.conf
 # with 1-3 GB Memory
 vfs.zfs.arc_max="200M"
 #
@@ -472,9 +478,9 @@ fi
 #EOF
 
 # Options for tmux
-echo "set-option -g history-limit 300000" >> /mnt/root/.tmux.conf
+echo "set-option -g history-limit 300000" >>/mnt/root/.tmux.conf
 
-cat << EOF > /mnt/etc/fstab
+cat <<EOF >/mnt/etc/fstab
 #/etc/fstab
 
 # Device		Mountpoint	FStype		Options	Dump	Pass#
@@ -484,7 +490,7 @@ if [ "$swap_partition_size" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  /dev/gpt/swap-${label}"
-		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >> /mnt/etc/fstab
+		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>/mnt/etc/fstab
 	done
 else
 	touch /mnt/etc/fstab
@@ -493,7 +499,6 @@ fi
 cat /mnt/etc/fstab
 
 zfs set readonly=on $poolname/var/empty
-
 
 echo
 echo "Installing new bootcode on disks: "
