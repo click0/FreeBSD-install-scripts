@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.01
+# Current Version: 1.07
 
 # Copyright
 # Vladislav V. Prodan <github.com/click0>
@@ -23,7 +23,7 @@ if [ "${mfsbsd_version}" == "${mfsbsd_version%.*}" ]; then
 fi
 
 url1=http://mfsbsd.vx.sk/files/iso/${mfsbsd_version%.*}/amd64
-url2=http://otrada.od.ua/pub
+url2=http://otrada.od.ua/FreeBSD/LiveCD/mfsbsd
 file1=mfsbsd-se-${mfsbsd_version}-RELEASE-amd64.iso
 
 hostname=${2:-${hostname_default}}
@@ -89,9 +89,9 @@ main() {
 	if [ ! -e "$file1" ]; then
 		if ( ping -q -c3 otrada.od.ua  > /dev/null 2>&1 )
 		then
-			wget $url2/$file1 || wget $url1/$file1
+			wget "$url2/$file1" || wget "$url1/$file1"
 		else
-			wget $url1/$file1
+			wget "$url1/$file1"
 		fi
 	fi
 	[ ! -e "$file1" ] && { echo "ISO image not found"; exit 1; }
@@ -118,8 +118,13 @@ menuentry "$file1" {
 	kfreebsd_module (loop)/mfsroot.gz type=mfs_root
 	set kFreeBSD.vfs.root.mountfrom="ufs:/dev/md0"
 	set kFreeBSD.mfsbsd.hostname="$hostname"
-	# set kFreeBSD.mfsbsd.autodhcp="YES"
-	set kFreeBSD.mfsbsd.autodhcp="NO"
+EOF
+  if [ "$ip" == "127.0.0.1" ]; then
+	  echo "set kFreeBSD.mfsbsd.autodhcp=\"YES\"" >> ${file234}
+      else
+	  echo "set kFreeBSD.mfsbsd.autodhcp=\"NO\"" >> ${file234}
+  fi
+	cat << EOF >> ${file234}
 #	set kFreeBSD.mfsbsd.interfaces="${iface_list} lo0"
 #	for iface in ${iface_list}; do
 #		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet $ip/${ip_mask_short}\"
@@ -127,9 +132,15 @@ menuentry "$file1" {
 #	done
 	set kFreeBSD.mfsbsd.mac_interfaces="ext1"
 	set kFreeBSD.mfsbsd.ifconfig_ext1_mac="${iface_mac}"
+EOF
+  if [ "$ip" != "127.0.0.1" ]; then
+  	cat << EOF >> ${file234}
 	set kFreeBSD.mfsbsd.ifconfig_ext1="inet $ip/${ip_mask_short}"
 #	set kFreeBSD.mfsbsd.ifconfig_$iface="inet $ip/${ip_mask_short}"
 	set kFreeBSD.mfsbsd.defaultrouter="${ip_default}"
+EOF
+  fi
+	cat << EOF >> ${file234}
 	set kFreeBSD.mfsbsd.nameservers="8.8.8.8 1.1.1.1"
 	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP"
 #	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
