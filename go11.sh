@@ -1,6 +1,7 @@
 #!/bin/sh
 
-# $Id: go11.sh,v 1.3 2017/03/03 22:56:21 root Exp $
+# Current Version: 1.33
+
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
 # modifyed with great help of gkontos from http://www.aisecure.net/2011/05/01/root-on-zfs-freebsd-current/
@@ -47,17 +48,10 @@
 
 set -x
 
-distdir="/mfs"
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
-ftphost="ftp://ftp6.ua.freebsd.org/pub/FreeBSD/snapshots/amd64/amd64/13.0-STABLE/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
 filelist="base lib32 kernel doc"
-memdisksize=350M
 memdisknumber=10
-hostname=core.domain.com
-iface="em0 em1 re0 igb0 vtnet0"
-iface=$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')
-zoneinfo="Europe/Kiev"
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
 #manual_iface='ifconfig_vtnet0="inet 1.1.1.2/24"'	# interface IP
@@ -66,31 +60,76 @@ zoneinfo="Europe/Kiev"
 #manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
 url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
-usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -m <zpool-raidmode> -d <distdir> -f <ftphost>"
+DESTDIR=/mnt
+
+usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
+[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk>]
+[ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
+  # shellcheck disable=SC2039
   echo -e "$*" >&2
   exit 1
 }
 
-while getopts p:s:S:n:f:m:d:z: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I: arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
+	P) password=${OPTARG} ;;
 	s) swap_partition_size=${OPTARG} ;;
 	S) zfs_partition_size=${OPTARG} ;;
 	n) poolname=${OPTARG} ;;
+	h) hostname=${OPTARG} ;;
 	f) ftphost=${OPTARG} ;;
 	m) mode=${OPTARG} ;;
+	M) memdisksize=${OPTARG} ;;
+	o) offset=${OPTARG} ;;
 	d) distdir=${OPTARG} ;;
 	z) zoneinfo=${OPTARG} ;;
+	g) gateway=${OPTARG} ;;
+	i) iface=${OPTARG} ;;
+	I) ip_address=${OPTARG} ;;
 	?) exerr ${usage} ;;
 	esac
 done
 shift $((${OPTIND} - 1))
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
-	exerr ${usage}
+	exerr "${usage}"
 	exit
+fi
+
+# count the number of providers
+devcount=$(echo "${provider}" | xargs -n1 | sort -u | xargs | wc -w | tr -d ' ')
+if [ -z "$devcount" ] || [ "$devcount" = ' ' ] || [ "$devcount" = "0" ]; then
+	exerr "${usage}"
+	exit
+fi
+
+[ -z "$distdir" ] && distdir="/mfs" # deprecated
+[ -z "$ftphost" ] && ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
+[ -z "$zoneinfo" ] && zoneinfo="Europe/Kiev"
+[ -z "$memdisksize" ] && memdisksize=350M
+[ -z "$password" ] && password="mfsroot123"
+[ -z "$hostname" ] && hostname="core.domain.com"
+[ -z "$offset" ] && offset="2048"   # остаток в конце диска, 1 MB
+
+# autodetect
+iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
+iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
+
+if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
+	gateway=$(netstat -rn4 | awk '/default/{print $2;}')
+	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
+fi
+
+[ "$gateway" = "DHCP" ]       && gateway=''
+[ "${ip_address}" = "DHCP" ]  && ip_address=''
+
+if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
+	iface_manual=yes
+	manual_gw="defaultrouter=\"$gateway\""			# gateway IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\""	# interface IP
 fi
 
 sysctl kern.geom.label.gptid.enable=0
@@ -110,20 +149,17 @@ sysctl vfs.zfs.min_auto_ashift=12
 #mdmfs -s $memdisksize md10 $distdir
 # check size /dev/md10
 #if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
-if [ -e "/dev/md$memdisknumber" ]; then
-	umount /dev/md$memdisknumber
-	mdconfig -d -u $memdisknumber
+if [ "$memdisksize" != "0" ]; then
+  if [ -e "/dev/md$memdisknumber" ]; then
+    umount /dev/md$memdisknumber
+    mdconfig -d -u $memdisknumber
+  fi
+  if [ ! -e "/dev/md$memdisknumber" ]; then
+    mdconfig -a -s $memdisksize -u $memdisknumber
+    newfs -U /dev/md$memdisknumber
+    mount /dev/md$memdisknumber $distdir
+  fi
 fi
-if [ ! -e "/dev/md$memdisknumber" ]; then
-	mdconfig -a -s $memdisksize -u $memdisknumber
-	newfs -U /dev/md$memdisknumber
-	mount /dev/md$memdisknumber $distdir
-fi
-
-for file in ${filelist}; do (fetch -o $distdir/$file.txz $ftphost/$file.txz || exit 1); done
-
-# count the number of providers
-devcount=$(echo ${provider} | xargs -n1 | sort -u | xargs | wc -w)
 
 # set our default zpool mirror-mode
 if [ -z "$mode" ]; then
@@ -192,7 +228,7 @@ for disk in $provider; do
 	echo " -> $disk"
 	# against PR 196102
 	if (gpart show /dev/$disk | egrep -v '=>| - free -|^$'); then
-		disk_index_list=$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)
+		disk_index_list="$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)"
 		for disk_index in ${disk_index_list}; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
@@ -220,7 +256,6 @@ check_size
 echo
 echo "NOTICE: Using ${ref_disk} (smallest or only disk) as reference disk for calculation offsets"
 echo
-sleep 2
 
 echo "Creating GPT boot partition on disks:"
 counter=0
@@ -228,7 +263,7 @@ for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
 	gpart add -s 1024 -t freebsd-boot -l boot-${counter} $disk >/dev/null
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 done
 
 if [ "${swap_partition_size}" ]; then
@@ -241,9 +276,11 @@ if [ "${swap_partition_size}" ]; then
 	done
 fi
 
-offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
+###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
 if [ -n "${zfs_partition_size}" ]; then
-	size_string="-s ${zfs_partition_size}"
+	size_string="-s $((zfs_partition_size - offset))"
+else
+	size_string="-s $((smallest_disk_size - offset))"
 fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
@@ -256,7 +293,7 @@ for disk in $provider; do
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 	labellist="${labellist} gpt/system-${label}"
 	if [ "$(expr $counter % 2)" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
@@ -269,10 +306,13 @@ ls -l /dev/gpt/
 # Make first partition active so the BIOS boots from it
 for disk in $provider; do
 	get_disk_labelname
-	echo 'a 1' | fdisk -f - $disk >/dev/null 2>&1
-	# todo
-	# gpart set -a active $disk
 	# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
+  # todo need testing
+  # work for MBR  slice
+  #   https://forums.freebsd.org/threads/freebsd-10-not-booting-stuck-at-bios-screen.47368/
+  #  gpart set -a active $disk
+  # legacy
+	# echo 'a 1' | fdisk -f - $disk >/dev/null 2>&1
 done
 
 if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
@@ -298,14 +338,14 @@ if [ "$mode" = "raid10" ]; then
 	zpool create -f ${zpool_option} $poolname ${labellist} || exit
 fi
 
-if [ $(zpool list -H -o name $poolname) != "$poolname" ]; then
+if [ "$(zpool list -H -o name $poolname)" != "$poolname" ]; then
 	echo "ERROR: Could not create zpool $poolname"
 	exit
 fi
 
 zpool export $poolname
 ls -l /dev/gpt/
-sleep 15
+sleep 3
 zpool import ${zpool_option} $poolname
 zpool status
 gpart show
@@ -347,13 +387,37 @@ zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 zfs list
 
 chmod 1777 /mnt/tmp
-cd /mnt
+cd /mnt || exit
 ln -s usr/home home
 chmod 1777 /mnt/var/tmp
 
-cd $distdir || exit 1
-export DESTDIR=/mnt
-for file in ${filelist}; do (tar --unlink -xpJf $file.txz -C ${DESTDIR:-/}); done
+mkdir -p /mnt/etc
+### Add swap info
+cat <<EOF >/mnt/etc/fstab
+#/etc/fstab
+
+# Device		Mountpoint	FStype		Options	Dump	Pass#
+EOF
+if [ "$swap_partition_size" ]; then
+	echo "Adding swap partitions in fstab:"
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  /dev/gpt/swap-${label}"
+		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>/mnt/etc/fstab
+#		swapon /dev/gpt/swap-${label}
+	done
+else
+	touch /mnt/etc/fstab
+fi
+
+cat /mnt/etc/fstab
+
+### Downloading system archive files
+
+cd ${DESTDIR:-/}
+for file in ${filelist}; do
+	fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+done
 
 cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
 
@@ -367,16 +431,20 @@ EOF
 
 # apply DNS settings
 [ -n "$nameserver" ] && {
-	echo "nameserver $nameserver" >>/mnt/etc/resolv.conf
-	echo "nameserver \"$nameserver\"" >>/mnt/etc/resolvconf.conf
+  cat << EOF >/mnt/etc/resolvconf.conf
+	nameserver $nameserver
+	nameserver "$nameserver"
+	resolv_conf_local_only="NO"
+EOF
 	resolvconf -u
 }
 
-if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ]; then
+if [ "${iface_manual}" = "1" ] || [ "${iface_manual}" = "yes" ] || [ "${iface_manual}" = "YES" ]; then
 	cat <<EOF >>/mnt/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
 ifconfig_DEFAULT="SYNCDHCP"
+ifconfig_enc0="NOAUTO"
 
 EOF
 	for interface in ${iface}; do
@@ -392,7 +460,8 @@ ${manual_iface_v6}
 EOF
 	fi
 else
-	echo 'ifconfig_DEFAULT="SYNCDHCP"' >>/mnt/etc/rc.conf
+	echo 'ifconfig_DEFAULT="SYNCDHCP"'  >>/mnt/etc/rc.conf
+	echo 'ifconfig_enc0="NOAUTO"'       >>/mnt/etc/rc.conf
 	for interface in ${iface}; do
 		echo ifconfig_$interface=\"DHCP\" >>/mnt/etc/rc.conf
 		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
@@ -459,24 +528,6 @@ fi
 # Options for tmux
 echo "set-option -g history-limit 300000" >>/mnt/root/.tmux.conf
 
-cat <<EOF >/mnt/etc/fstab
-#/etc/fstab
-
-# Device		Mountpoint	FStype		Options	Dump	Pass#
-EOF
-if [ "$swap_partition_size" ]; then
-	echo "Adding swap partitions in fstab:"
-	for disk in $provider; do
-		get_disk_labelname
-		echo " ->  /dev/gpt/swap-${label}"
-		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>/mnt/etc/fstab
-	done
-else
-	touch /mnt/etc/fstab
-fi
-
-cat /mnt/etc/fstab
-
 zfs set readonly=on $poolname/var/empty
 
 echo
@@ -492,7 +543,7 @@ echo passwd root
 
 cd /
 chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/$zoneinfo /etc/localtime;"
-echo 'mfsroot123' | pw -V /mnt/etc usermod root -h 0
+echo "$password" | pw -V /mnt/etc usermod root -h 0
 chroot /mnt /bin/sh -c "cd /; umount /dev"
 
 zfs umount -a
@@ -500,8 +551,14 @@ zfs set mountpoint=legacy $poolname
 zfs set mountpoint=/tmp $poolname/tmp
 zfs set mountpoint=/usr $poolname/usr
 zfs set mountpoint=/var $poolname/var
+swapoff /dev/gpt/swap-${label}
 
 echo zpool status:
 zpool status
 echo
 echo "Please reboot the system from the harddisk(s), remove the FreeBSD media from you cdrom!"
+
+zpool export -f $poolname
+
+file234=/root/"$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")".completed
+touch "$file234"

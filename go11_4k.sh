@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.29
+# Current Version: 1.33
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -62,14 +62,17 @@ url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 
 DESTDIR=/mnt
 
-usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost> [ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> ] [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
+usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
+[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk>]
+[ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
-	echo -e "$*" >&2
-	exit 1
+  # shellcheck disable=SC2039
+  echo -e "$*" >&2
+  exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:d:z:g:i:I: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I: arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -80,6 +83,7 @@ while getopts p:P:s:S:n:h:f:m:M:d:z:g:i:I: arg; do
 	f) ftphost=${OPTARG} ;;
 	m) mode=${OPTARG} ;;
 	M) memdisksize=${OPTARG} ;;
+	o) offset=${OPTARG} ;;
 	d) distdir=${OPTARG} ;;
 	z) zoneinfo=${OPTARG} ;;
 	g) gateway=${OPTARG} ;;
@@ -91,40 +95,41 @@ done
 shift $((${OPTIND} - 1))
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
-	exerr ${usage}
+	exerr "${usage}"
 	exit
 fi
 
 # count the number of providers
-devcount=$(echo ${provider} | xargs -n1 | sort -u | xargs | wc -w | tr -d ' ' )
-if [ -z "$devcount" ] || [ "$devcount" == ' ' ] || [ "$devcount" == "0" ]; then
-	exerr ${usage}
+devcount=$(echo "${provider}" | xargs -n1 | sort -u | xargs | wc -w | tr -d ' ')
+if [ -z "$devcount" ] || [ "$devcount" = ' ' ] || [ "$devcount" = "0" ]; then
+	exerr "${usage}"
 	exit
 fi
 
-[ -z "$distdir" ] && distdir="/mfs"   # deprecated
+[ -z "$distdir" ] && distdir="/mfs" # deprecated
 [ -z "$ftphost" ] && ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 [ -z "$zoneinfo" ] && zoneinfo="Europe/Kiev"
 [ -z "$memdisksize" ] && memdisksize=350M
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
+[ -z "$offset" ] && offset="2048"   # остаток в конце диска, 1 MB
 
 # autodetect
 iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
 iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
 
 if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
-    gateway=$(netstat -rn4 | awk '/default/{print $2;}')
-    ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
+	gateway=$(netstat -rn4 | awk '/default/{print $2;}')
+	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
 fi
 
 [ "$gateway" = "DHCP" ]       && gateway=''
 [ "${ip_address}" = "DHCP" ]  && ip_address=''
 
 if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
-    iface_manual=yes
-    manual_gw="defaultrouter=\"$gateway\""			# gateway IP
-    manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\""	# interface IP
+	iface_manual=yes
+	manual_gw="defaultrouter=\"$gateway\""			# gateway IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\""	# interface IP
 fi
 
 sysctl kern.geom.label.gptid.enable=0
@@ -223,7 +228,7 @@ for disk in $provider; do
 	echo " -> $disk"
 	# against PR 196102
 	if (gpart show /dev/$disk | egrep -v '=>| - free -|^$'); then
-		disk_index_list=$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)
+		disk_index_list="$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)"
 		for disk_index in ${disk_index_list}; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
@@ -251,7 +256,6 @@ check_size
 echo
 echo "NOTICE: Using ${ref_disk} (smallest or only disk) as reference disk for calculation offsets"
 echo
-sleep 2
 
 echo "Creating GPT boot partition on disks:"
 counter=0
@@ -259,7 +263,7 @@ for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
 	gpart add -s 1024 -t freebsd-boot -a 8k -l boot-${counter} $disk >/dev/null
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 done
 
 if [ "${swap_partition_size}" ]; then
@@ -272,9 +276,11 @@ if [ "${swap_partition_size}" ]; then
 	done
 fi
 
-offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
+###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
 if [ -n "${zfs_partition_size}" ]; then
-	size_string="-s ${zfs_partition_size}"
+	size_string="-s $((zfs_partition_size - offset))"
+else
+	size_string="-s $((smallest_disk_size - offset))"
 fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
@@ -287,7 +293,7 @@ for disk in $provider; do
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 	labellist="${labellist} gpt/system-${label}.nop"
 	if [ "$(expr $counter % 2)" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
@@ -324,7 +330,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	gnop create -S 8192 /dev/gpt/system-${label} >/dev/null
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 done
 # Show gnop output
 gnop list
@@ -345,7 +351,7 @@ if [ "$mode" = "raid10" ]; then
 	zpool create -f ${zpool_option} $poolname ${labellist} || exit
 fi
 
-if [ $(zpool list -H -o name $poolname) != "$poolname" ]; then
+if [ "$(zpool list -H -o name $poolname)" != "$poolname" ]; then
 	echo "ERROR: Could not create zpool $poolname"
 	exit
 fi
@@ -357,7 +363,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	gnop destroy /dev/gpt/system-${label}.nop >/dev/null
-	counter=$(expr $counter + 1)
+	counter=$((counter + 1))
 done
 ls -l /dev/gpt/
 sleep 3
@@ -402,7 +408,7 @@ zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 zfs list
 
 chmod 1777 /mnt/tmp
-cd /mnt
+cd /mnt || exit
 ln -s usr/home home
 chmod 1777 /mnt/var/tmp
 
@@ -431,7 +437,7 @@ cat /mnt/etc/fstab
 
 cd ${DESTDIR:-/}
 for file in ${filelist}; do
-    fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+	fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
 done
 
 cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
@@ -446,16 +452,20 @@ EOF
 
 # apply DNS settings
 [ -n "$nameserver" ] && {
-	echo "nameserver $nameserver" >>/mnt/etc/resolv.conf
-	echo "nameserver \"$nameserver\"" >>/mnt/etc/resolvconf.conf
+  cat << EOF >/mnt/etc/resolvconf.conf
+	nameserver $nameserver
+	nameserver "$nameserver"
+	resolv_conf_local_only="NO"
+EOF
 	resolvconf -u
 }
 
-if [ "${iface_manual}" == "1" ] || [ "${iface_manual}" == "yes" ] || [ "${iface_manual}" == "YES" ]; then
+if [ "${iface_manual}" = "1" ] || [ "${iface_manual}" = "yes" ] || [ "${iface_manual}" = "YES" ]; then
 	cat <<EOF >>/mnt/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
 ifconfig_DEFAULT="SYNCDHCP"
+ifconfig_enc0="NOAUTO"
 
 EOF
 	for interface in ${iface}; do
@@ -471,7 +481,8 @@ ${manual_iface_v6}
 EOF
 	fi
 else
-	echo 'ifconfig_DEFAULT="SYNCDHCP"' >>/mnt/etc/rc.conf
+	echo 'ifconfig_DEFAULT="SYNCDHCP"'  >>/mnt/etc/rc.conf
+	echo 'ifconfig_enc0="NOAUTO"'       >>/mnt/etc/rc.conf
 	for interface in ${iface}; do
 		echo ifconfig_$interface=\"DHCP\" >>/mnt/etc/rc.conf
 		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
