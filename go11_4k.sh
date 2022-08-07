@@ -72,7 +72,7 @@ exerr() {
   exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I:a: arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -89,6 +89,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I: arg; do
 	g) gateway=${OPTARG} ;;
 	i) iface=${OPTARG} ;;
 	I) ip_address=${OPTARG} ;;
+	a) ashift=${OPTARG} ;;
 	?) exerr ${usage} ;;
 	esac
 done
@@ -112,6 +113,7 @@ fi
 [ -z "$memdisksize" ] && memdisksize=350M
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
+[ -z "$ashift" ] && ashift=4k   # 4k or 8k
 [ -z "$offset" ] && offset="2048"   # остаток в конце диска, 1 MB
 
 # autodetect
@@ -262,7 +264,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk}"
-	gpart add -s 1024 -t freebsd-boot -a 8k -l boot-${counter} $disk >/dev/null
+	gpart add -s 1024 -t freebsd-boot -a $ashift -l boot-${counter} $disk >/dev/null
 	counter=$((counter + 1))
 done
 
@@ -271,7 +273,7 @@ if [ "${swap_partition_size}" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -a 8k -l swap-${label} ${disk} >/dev/null
+		gpart add -b 2048 -s "${swap_partition_size}" -t freebsd-swap -a $ashift -l swap-"${label}" ${disk} >/dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
@@ -327,6 +329,8 @@ fi
 
 # create gnop
 counter=0
+[ "$ashift" = "4k" ] && gnop_ashift=4096
+[ "$ashift" = "8k" ] && gnop_ashift=8192
 for disk in $provider; do
 	get_disk_labelname
 	gnop create -S 8192 /dev/gpt/system-${label} >/dev/null
