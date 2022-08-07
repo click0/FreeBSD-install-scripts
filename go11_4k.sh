@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.33
+# Current Version: 1.37
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -136,7 +136,7 @@ fi
 
 sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
-sysctl vfs.zfs.min_auto_ashift=13
+# sysctl vfs.zfs.min_auto_ashift=13	# need module zfs
 
 [ -n "$nameserver" ] && {
 	mkdir -p /tmp/bsdinstall_etc
@@ -191,7 +191,7 @@ if [ "$devcount" -lt "4" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need at least four disks for a raid10 equivalent szenario!"
 	exit
 fi
-if [ "$(expr $devcount % 2)" -ne "0" -a "$mode" = "raid10" ]; then
+if [ "$((devcount % 2))" -ne "0" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need an even number of disks for a raid10 equivalent szenario!"
 	exit
 fi
@@ -199,14 +199,16 @@ fi
 check_size() {
 	ref_disk_size=$(gpart list ${ref_disk} | grep 'Mediasize' | awk '{print $2}')
 	if [ "${zfs_partition_size}" ]; then
-		_zfs_partition_size=$(echo "${zfs_partition_size}" | awk '{print tolower($0)}' | sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": | bc | sed 's:\.[0-9]*$::g')
+		_zfs_partition_size=$(echo "${zfs_partition_size}" | awk '{print tolower($0)}' |
+			sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": |
+			bc | sed 's:\.[0-9]*$::g')
 	fi
 	if [ "${swap_partition_size}" ]; then
 		_swap_partition_size=$(echo "${swap_partition_size}" | awk '{print tolower($0)}' |
 			sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": |
 			bc | sed 's:\.[0-9]*$::g')
 	fi
-	total_size=$((${_zfs_partition_size} + ${_swap_partition_size} + 162))
+	total_size=$((_zfs_partition_size + _swap_partition_size + 162))
 	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
 		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
 		exit 1
@@ -219,6 +221,11 @@ get_disk_labelname() {
 	label=${disk##*=}
 	disk=${disk%%=*}
 }
+
+# stop swapping
+if swapinfo >/dev/null 2>/dev/null; then
+	swapoff "$(swapinfo | tail -n 1 | awk '{print$1}')"
+fi
 
 echo "Creating GPT label on disks:"
 for disk in $provider; do
@@ -235,6 +242,7 @@ for disk in $provider; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
 	fi
+	zpool labelclear -f $disk >/dev/null
 	gpart destroy -F $disk >/dev/null
 	gpart create -s gpt $disk >/dev/null
 done
@@ -290,7 +298,7 @@ counter=0
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
-	gpart add -t freebsd-zfs ${size_string} -a 8k -l system-${label} ${disk} >/dev/null
+	gpart add -t freebsd-zfs ${size_string} -a $ashift -l system-${label} ${disk} >/dev/null
 
 	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
@@ -319,6 +327,7 @@ done
 
 if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
+	sysctl vfs.zfs.min_auto_ashift=13	# need module zfs
 fi
 if ! $(/sbin/kldstat -m g_nop >/dev/null 2>/dev/null); then
 	/sbin/kldload geom_nop.ko >/dev/null 2>/dev/null
@@ -333,7 +342,7 @@ counter=0
 [ "$ashift" = "8k" ] && gnop_ashift=8192
 for disk in $provider; do
 	get_disk_labelname
-	gnop create -S 8192 /dev/gpt/system-${label} >/dev/null
+	gnop create -S ${gnop_ashift} /dev/gpt/system-${label} >/dev/null
 	counter=$((counter + 1))
 done
 # Show gnop output
@@ -386,7 +395,7 @@ zfs set freebsd:boot-environment=1 $poolname
 
 # Now we create some stuff we also would like to have in separate filesystems
 
-zfs set mountpoint=/mnt $poolname
+zfs set mountpoint=/mnt $poolname || exit 1
 zfs create $poolname/usr
 #zfs create $poolname/usr/home
 zfs create $poolname/var

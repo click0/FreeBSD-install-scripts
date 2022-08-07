@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.33
+# Current Version: 1.37
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -134,7 +134,7 @@ fi
 
 sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
-sysctl vfs.zfs.min_auto_ashift=12
+# sysctl vfs.zfs.min_auto_ashift=12	# need module zfs
 
 [ -n "$nameserver" ] && {
 	mkdir -p /tmp/bsdinstall_etc
@@ -197,7 +197,9 @@ fi
 check_size() {
 	ref_disk_size=$(gpart list ${ref_disk} | grep 'Mediasize' | awk '{print $2}')
 	if [ "${zfs_partition_size}" ]; then
-		_zfs_partition_size=$(echo "${zfs_partition_size}" | awk '{print tolower($0)}' | sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": | bc | sed 's:\.[0-9]*$::g')
+		_zfs_partition_size=$(echo "${zfs_partition_size}" | awk '{print tolower($0)}' |
+			sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": |
+			bc | sed 's:\.[0-9]*$::g')
 	fi
 	if [ "${swap_partition_size}" ]; then
 		_swap_partition_size=$(echo "${swap_partition_size}" | awk '{print tolower($0)}' |
@@ -233,6 +235,7 @@ for disk in $provider; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
 	fi
+	zpool labelclear -f $disk >/dev/null
 	gpart destroy -F $disk >/dev/null
 	gpart create -s gpt $disk >/dev/null
 done
@@ -271,7 +274,7 @@ if [ "${swap_partition_size}" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s ${swap_partition_size} -t freebsd-swap -l swap-${label} ${disk} >/dev/null
+		gpart add -b 2048 -s "${swap_partition_size}" -t freebsd-swap -l swap-"${label}" ${disk} >/dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
@@ -317,6 +320,7 @@ done
 
 if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
+	sysctl vfs.zfs.min_auto_ashift=12	# need module zfs
 fi
 
 # we need to create /boot/zfs so zpool.cache can be written.
@@ -361,7 +365,7 @@ zfs set freebsd:boot-environment=1 $poolname
 
 # Now we create some stuff we also would like to have in separate filesystems
 
-zfs set mountpoint=/mnt $poolname
+zfs set mountpoint=/mnt $poolname || exit 1
 zfs create $poolname/usr
 #zfs create $poolname/usr/home
 zfs create $poolname/var
