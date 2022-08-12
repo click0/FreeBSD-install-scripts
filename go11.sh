@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.37
+# Current Version: 1.41
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -92,7 +92,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I: arg; do
 	?) exerr ${usage} ;;
 	esac
 done
-shift $((${OPTIND} - 1))
+shift "$((OPTIND-1))"
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
 	exerr "${usage}"
@@ -112,7 +112,7 @@ fi
 [ -z "$memdisksize" ] && memdisksize=350M
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
-[ -z "$offset" ] && offset="2048"   # остаток в конце диска, 1 MB
+[ -z "$offset" ] && offset="2048"   # remainder at the end of the disc, 1 MB
 
 # autodetect
 iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
@@ -146,9 +146,7 @@ sysctl kern.geom.debugflags=16
 	distdir="/opt$distdir"
 	mkdir -p $distdir || exit 1
 }
-#mdmfs -s $memdisksize md10 $distdir
-# check size /dev/md10
-#if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
+
 if [ "$memdisksize" != "0" ]; then
   if [ -e "/dev/md$memdisknumber" ]; then
     umount /dev/md$memdisknumber
@@ -189,7 +187,7 @@ if [ "$devcount" -lt "4" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need at least four disks for a raid10 equivalent szenario!"
 	exit
 fi
-if [ "$(expr $devcount % 2)" -ne "0" -a "$mode" = "raid10" ]; then
+if [ "$((devcount % 2))" -ne "0" -a "$mode" = "raid10" ]; then
 	echo "Sorry, you need an even number of disks for a raid10 equivalent szenario!"
 	exit
 fi
@@ -206,7 +204,7 @@ check_size() {
 			sed -Ees:g:km:g -es:m:kk:g -es:k:"*2b":g -es:b:"*128w":g -es:w:"*4 ":g -e"s:(^|[^0-9])0x:\1\0X:g" -ey:x:"*": |
 			bc | sed 's:\.[0-9]*$::g')
 	fi
-	total_size=$((${_zfs_partition_size} + ${_swap_partition_size} + 162))
+	total_size=$((_zfs_partition_size + _swap_partition_size + 162))
 	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
 		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
 		exit 1
@@ -219,6 +217,11 @@ get_disk_labelname() {
 	label=${disk##*=}
 	disk=${disk%%=*}
 }
+
+# stop swapping
+if swapinfo >/dev/null 2>/dev/null; then
+	swapoff "$(swapinfo | tail -n 1 | awk '{print$1}')"
+fi
 
 echo "Creating GPT label on disks:"
 for disk in $provider; do
@@ -523,12 +526,6 @@ vfs.zfs.arc_max="200M"
 EOF
 fi
 
-# 4) TTY for serial console
-# deprecated after FreeBSD 12.0 or high
-#cat << EOF >> /mnt/etc/ttys
-#ttyu1 "/usr/libexec/getty std.9600" vt100 on secure
-#EOF
-
 # Options for tmux
 echo "set-option -g history-limit 300000" >>/mnt/root/.tmux.conf
 
@@ -564,5 +561,6 @@ echo "Please reboot the system from the harddisk(s), remove the FreeBSD media fr
 
 zpool export -f $poolname
 
+# for Ansible
 file234=/root/"$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")".completed
 touch "$file234"

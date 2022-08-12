@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.37
+# Current Version: 1.41
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -63,7 +63,7 @@ url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 DESTDIR=/mnt
 
 usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
-[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk>]
+[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>]
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
@@ -93,7 +93,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I:a: arg; do
 	?) exerr ${usage} ;;
 	esac
 done
-shift $((${OPTIND} - 1))
+shift "$((OPTIND-1))"
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
 	exerr "${usage}"
@@ -114,7 +114,7 @@ fi
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
 [ -z "$ashift" ] && ashift=4k   # 4k or 8k
-[ -z "$offset" ] && offset="2048"   # остаток в конце диска, 1 MB
+[ -z "$offset" ] && offset="2048"   # remainder at the end of the disc, 1 MB
 
 # autodetect
 iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
@@ -148,9 +148,7 @@ sysctl kern.geom.debugflags=16
 	distdir="/opt$distdir"
 	mkdir -p $distdir || exit 1
 }
-#mdmfs -s $memdisksize md10 $distdir
-# check size /dev/md10
-#if [ -e /dev/md10 ] && [ "`mdconfig -lv -u 10 | awk '{print $3;}'`" == "$memdisksize" ]; then
+
 if [ "$memdisksize" != "0" ]; then
   if [ -e "/dev/md$memdisknumber" ]; then
     umount /dev/md$memdisknumber
@@ -553,12 +551,6 @@ vfs.zfs.arc_max="200M"
 EOF
 fi
 
-# 4) TTY for serial console
-# deprecated after FreeBSD 12.0 or high
-#cat << EOF >> /mnt/etc/ttys
-#ttyu1 "/usr/libexec/getty std.9600" vt100 on secure
-#EOF
-
 # Options for tmux
 echo "set-option -g history-limit 300000" >>/mnt/root/.tmux.conf
 
@@ -594,5 +586,6 @@ echo "Please reboot the system from the harddisk(s), remove the FreeBSD media fr
 
 zpool export -f $poolname
 
+# for Ansible
 file234=/root/"$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")".completed
 touch "$file234"
