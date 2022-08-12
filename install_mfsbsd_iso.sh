@@ -2,7 +2,7 @@
 
 script_type="self-contained"
 # shellcheck disable=SC2034
-version_script="1.13"
+version_script="1.15"
 
 # Copyright
 # Vladislav V. Prodan <github.com/click0>
@@ -10,7 +10,7 @@ version_script="1.13"
 # 2018-2022
 
 # syntax
-# script_name.sh (mini|standart|se) 13.0 <hostname> fxp0 250
+# script_name.sh (mini|standard|se) [ 13.0 ] [ <hostname> ] [ fxp0 ] [ 250 ]
 
 mfsbsd_version_default="12.2" # or 12 13 13.0 13.1
 hostname_default="YOURHOSTNAME"
@@ -21,7 +21,7 @@ case $1 in
 	mini)		file_prefix="-mini-"	;;
 	standard)	file_prefix="-"			;;
 	se)			file_prefix="-se-"	 	;;
-	*) 			file_prefix="-mini-" 	;;
+	*) 			file_prefix="-"			;;
 esac
 
 mfsbsd_version=${2:-${mfsbsd_version_default}}
@@ -148,17 +148,11 @@ menuentry "$file1" {
 EOF
   if [ "$ip" = "127.0.0.1" ]; then
 	  echo "set kFreeBSD.mfsbsd.autodhcp=\"YES\"" >> ${file234}
-      else
+  else
 	  echo "set kFreeBSD.mfsbsd.autodhcp=\"NO\"" >> ${file234}
   fi
 	cat << EOF >> ${file234}
-#	set kFreeBSD.mfsbsd.interfaces="${iface_list} lo0"
-#	for iface in ${iface_list}; do
-#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet $ip/${ip_mask_short}\"
-#		echo set kFreeBSD.mfsbsd.ifconfig_$iface=\"inet6 $ipv6\"
-#	done
 	set kFreeBSD.mfsbsd.mac_interfaces="ext1"
-	set kFreeBSD.mfsbsd.ifconfig_ext1_mac="${iface_mac}"
 EOF
   if [ "$ip" != "127.0.0.1" ]; then
   	cat << EOF >> ${file234}
@@ -169,16 +163,14 @@ EOF
   fi
 	cat << EOF >> ${file234}
 	set kFreeBSD.mfsbsd.nameservers="8.8.8.8 1.1.1.1"
-	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP"
+#	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP" #wtf?
 #	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
 
 }
 
 EOF
 
-#	sed -i'' -e 's/set default="0"/set default="3"/g' ${file234}
 	menuentry=$(grep '^menuentry ' ${file234} | wc -l)
-#	[ "$(lsb_release -is)" = "Debian" ] && { $(( $menuentry - 2)); }
 	echo "set default=\"$menuentry\"" >> ${file234}
 
 	echo reboot!
@@ -202,7 +194,7 @@ install_ubuntu() {
 
 install_centos() {
 
-	yum install grub-imageboot || exit 1
+	yum -y install grub-imageboot || exit 1
 	main
 
 }
@@ -216,8 +208,8 @@ install_redhat() {
 
 check_free_space_boot
 
-apt-get update || yum update
-apt-get -y install lsb-release || yum install redhat-lsb-core
+apt-get update || yum update -y
+apt-get -y install lsb-release || yum -y install redhat-lsb-core
 
 
 [ "$(lsb_release -is)" = "Debian" ] && { install_debian ; exit 1; }
