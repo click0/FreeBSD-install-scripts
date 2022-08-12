@@ -13,7 +13,7 @@ Here is a set of scripts intended for a guaranteed installation of the FreeBSD O
 
 ### Description
 
-For installation, a standard MfsBSD image is used, where there is a `tmux` application and `root|mfsroot` accesses.  
+For installation, a standard MfsBSD image is used, where there is a `tmux` application and `root/mfsroot` accesses.  
 We do not need the FreeBSD archives in the image, we will download them separately from our own or public http server.  
 Access to the new system, if no new password was specified in the arguments, after setting the scripts `go11.sh`/`go11_4k.sh` - `rootmfsroot123`.  
 MfsBSD does **NOT** support IPv6.
