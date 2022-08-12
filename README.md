@@ -32,8 +32,8 @@ MfsBSD does **NOT** support IPv6.
 ##### If DHCP is **NOT** working
 
 6. there is Linux installed ==> then via GRUB, GRUB-IMAGEBOOT, ISO MfsBSD, kFreeBSD
-7. there is rescue FreeBSD with ZFS ==> repack MfsBSD.img and then write to /dev/ada0
-8. it is possible to load ISO ==> modify MfsBSD, boot from our image and install the system from it via `go11_4k.sh`
+7. there is rescue FreeBSD with ZFS ==> repack MfsBSD.img and then write this image to /dev/ada0
+8. it is possible to load ISO ==> modify MfsBSD ISO, boot from our image and install the system from it via `go11_4k.sh`
 
 ### Script syntax
 
