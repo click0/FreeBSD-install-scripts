@@ -73,11 +73,15 @@ MfsBSD **НЕ** поддерживает IPv6.
 - `go11.sh`
 - `mfsbsd_repack.sh`
 
-## 🤝 Contributing
+#### Автор:
+
+- Vladislav V. Prodan `<github.com/click0>`
+
+### 🤝 Contributing
 
 Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](https://github.com/click0/domain-check-2/issues).
 
-## Show your support
+### Show your support
 
 Give a ⭐ if this project helped you!
 
