@@ -178,33 +178,6 @@ EOF
 
 }
 
-install_debian() {
-
-	apt-get -y install grub-imageboot || exit 1;
-	main
-
-}
-
-install_ubuntu() {
-
-	install_debian
-
-}
-
-
-install_centos() {
-
-	yum -y install grub-imageboot || exit 1
-	main
-
-}
-
-install_redhat() {
-
-	install_centos
-
-}
-
 
 check_free_space_boot
 

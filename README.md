@@ -26,12 +26,12 @@ MfsBSD does **NOT** support IPv6.
 1. there is rescue FreeBSD with ZFS ==> install via `go11_4k.sh`
 2. there is rescue FreeBSD without ZFS ==> write MfsBSD.img directly to /dev/ada0
 3. it is possible to load ISO ==> load MfsBSD and install inside it via `go11_4k.sh`
-4. there is Linux installed ==> then via GRUB, GRUB-IMAGEBOOT, ISO MfsBSD, kFreeBSD
+4. there is Linux installed ==> then via GRUB, ISO MfsBSD, kFreeBSD
 5. there is rescue Linux ==> then in vKVM (statically linked qemu) we load ISO MfsBSD, we forward /dev/sda, through ssh or VNC the client install with ISO system, then we correct a network and we try to reboot a host machine.
 
 ##### If DHCP is **NOT** working
 
-6. there is Linux installed ==> then via GRUB, GRUB-IMAGEBOOT, ISO MfsBSD, kFreeBSD
+6. there is Linux installed ==> then via GRUB, ISO MfsBSD, kFreeBSD
 7. there is rescue FreeBSD with ZFS ==> repack MfsBSD.img and then write this image to /dev/ada0
 8. it is possible to load ISO ==> modify MfsBSD ISO, boot from our image and install the system from it via `go11_4k.sh`
 
@@ -68,6 +68,7 @@ MfsBSD does **NOT** support IPv6.
 
 ###### Source resources:
 [freebsd_81_zfs_install.sh](https://github.com/clickbg/scripts/blob/c5c90b8475ba32337de9fdb8808113d32f922454/FreeBSD/freebsd_81_zfs_install.sh)
+[MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
 - `go11.sh`

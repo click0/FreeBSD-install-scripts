@@ -26,12 +26,12 @@ MfsBSD **НЕ** поддерживает IPv6.
 1. есть rescue FreeBSD с ZFS ==> ставим через `go11_4k.sh`
 2. есть rescue FreeBSD без ZFS ==> пишем MfsBSD.img сразу на /dev/ada0
 3. есть возможность грузить ISO ==> грузим MfsBSD и внутри него ставим через `go11_4k.sh`
-4. есть установленная Linux ==> то через GRUB, GRUB-IMAGEBOOT, ISO MfsBSD, kFreeBSD
+4. есть установленная Linux ==> то через GRUB, ISO MfsBSD, kFreeBSD
 5. есть rescue Linux ==> тогда в vKVM (статически слинкованный qemu) грузим ISO MfsBSD, пробрасываем /dev/sda, через ssh или VNC клиент устанавливаем с ISO систему, потом правим сеть и пробуем перегрузить хост машину.
 
 ##### Если **НЕ** работает DHCP
 
-6. есть установленная Linux ==> то через GRUB, GRUB-IMAGEBOOT, ISO MfsBSD, kFreeBSD
+6. есть установленная Linux ==> то через GRUB, ISO MfsBSD, kFreeBSD
 7. есть rescue FreeBSD с ZFS ==> перепаковываем MfsBSD.img и потом пишем этот образ на /dev/ada0
 8. есть возможность грузить ISO ==> модифицируем MfsBSD ISO, грузимся с нашего образа и с него ставим систему через `go11_4k.sh`
 
@@ -68,6 +68,7 @@ MfsBSD **НЕ** поддерживает IPv6.
 
 ###### Исходные ресурсы:
 [freebsd_81_zfs_install.sh](https://github.com/clickbg/scripts/blob/c5c90b8475ba32337de9fdb8808113d32f922454/FreeBSD/freebsd_81_zfs_install.sh)
+[MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
 - `go11.sh`
