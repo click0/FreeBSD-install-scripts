@@ -39,12 +39,15 @@ MfsBSD **НЕ** поддерживает IPv6.
 
 - `go11.sh`/`go11_4k.sh`
   
-        sh go11_4k.sh -p vtbd0 -p vtbd1 -s4G -n zroot
+        sh go11_4k.sh -p vtbd0 -s4G -n zroot  
+    или  
+  
+        sh go11_4k.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
 
     Полный синтаксис:
     ```
     # sh go11_4k.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
-    [ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>]
+    [ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password>]
     [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
     ```
 

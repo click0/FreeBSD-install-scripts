@@ -63,7 +63,7 @@ url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
 DESTDIR=/mnt
 
 usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
-[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>]
+[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password>]
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
