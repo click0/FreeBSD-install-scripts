@@ -166,8 +166,6 @@ EOF
 #	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP" #wtf?
 #	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
 
-	set kFreeBSD.mfsbsd.nameservers="8.8.8.8"
-
 }
 
 EOF
