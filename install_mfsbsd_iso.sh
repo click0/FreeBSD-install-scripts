@@ -2,7 +2,7 @@
 
 script_type="self-contained"
 # shellcheck disable=SC2034
-version_script="1.15"
+version_script="1.17"
 
 # Copyright
 # Vladislav V. Prodan <github.com/click0>
@@ -166,6 +166,8 @@ EOF
 #	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP" #wtf?
 #	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
 
+	set kFreeBSD.mfsbsd.nameservers="8.8.8.8"
+
 }
 
 EOF
@@ -182,13 +184,6 @@ EOF
 check_free_space_boot
 
 apt-get update || yum update -y
-apt-get -y install lsb-release || yum -y install redhat-lsb-core
+apt-get -y install wget || yum -y install wget
 
-
-[ "$(lsb_release -is)" = "Debian" ] && { install_debian ; exit 1; }
-
-[ "$(lsb_release -is)" = "Ubuntu" ] && { install_ubuntu ; exit 1; }
-
-[ "$(lsb_release -is)" = "Centos" ] && { install_centos ; exit 1; }
-
-[ "$(lsb_release -is)" = "RedHat" ] && { install_redhat ; exit 1; }
+main
