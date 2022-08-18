@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.41
+# Current Version: 1.43
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -58,21 +58,20 @@ memdisknumber=10
 #nameserver="8.8.8.8"							# single nameserver
 #manual_gw_v6='ipv6_defaultrouter="2001:41d0:0005:1000::1"'			# gateway IP
 #manual_iface_v6='ifconfig_vtnet0_ipv6=""2001:41d0:0005:1000:0000:0000:0000:abcd/64"'	# interface IP
-url_ssh_key_list="http://otrada.od.ua http://support.org.ua/install/test123"
-
-DESTDIR=/mnt
 
 usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
-[ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password>]
+[ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>
+-P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
+-z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> ]
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
-  # shellcheck disable=SC2039
-  echo -e "$*" >&2
-  exit 1
+	# shellcheck disable=SC2039
+	echo -e "$*" >&2
+	exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I:a: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:z:Z:k:K: arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -85,12 +84,17 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:z:g:i:I:a: arg; do
 	M) memdisksize=${OPTARG} ;;
 	o) offset=${OPTARG} ;;
 	d) distdir=${OPTARG} ;;
-	z) zoneinfo=${OPTARG} ;;
+	D) destdir=${OPTARG} ;;
+	t) timezone=${OPTARG} ;;
 	g) gateway=${OPTARG} ;;
 	i) iface=${OPTARG} ;;
 	I) ip_address=${OPTARG} ;;
 	a) ashift=${OPTARG} ;;
-	?) exerr ${usage} ;;
+	z) file_zfs_skeleton=${OPTARG} ;;
+	Z) url_file_zfs_skeleton=${OPTARG} ;;
+	k) ssh_key_file="${ssh_key_file} ${OPTARG}" ;;
+	K) ssh_key_dir="${ssh_key_dir} ${OPTARG}" ;;
+	?) exerr "${usage}" ;;
 	esac
 done
 shift "$((OPTIND-1))"
@@ -107,14 +111,15 @@ if [ -z "$devcount" ] || [ "$devcount" = ' ' ] || [ "$devcount" = "0" ]; then
 	exit
 fi
 
-[ -z "$distdir" ] && distdir="/mfs" # deprecated
+#[ -z "$distdir" ] && distdir="/mfs" # deprecated
 [ -z "$ftphost" ] && ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
-[ -z "$zoneinfo" ] && zoneinfo="Europe/Kiev"
-[ -z "$memdisksize" ] && memdisksize=350M
+[ -z "$timezone" ] && timezone="Europe/Kiev"
+[ -z "$memdisksize" ] && memdisksize=350M # deprecated
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
-[ -z "$ashift" ] && ashift=4k   # 4k or 8k
-[ -z "$offset" ] && offset="2048"   # remainder at the end of the disc, 1 MB
+[ -z "$ashift" ] && ashift=4k     # 4k or 8k
+[ -z "$offset" ] && offset="2048" # remainder at the end of the disc, 1 MB
+destdir=${destdir:-/mnt}
 
 # autodetect
 iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
@@ -125,13 +130,13 @@ if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
 	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
 fi
 
-[ "$gateway" = "DHCP" ]       && gateway=''
-[ "${ip_address}" = "DHCP" ]  && ip_address=''
+[ "$gateway" = "DHCP" ] && gateway=''
+[ "${ip_address}" = "DHCP" ] && ip_address=''
 
 if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
 	iface_manual=yes
-	manual_gw="defaultrouter=\"$gateway\""			# gateway IP
-	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\""	# interface IP
+	manual_gw="defaultrouter=\"$gateway\""                      # gateway IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\"" # interface IP
 fi
 
 sysctl kern.geom.label.gptid.enable=0
@@ -143,22 +148,26 @@ sysctl kern.geom.debugflags=16
 	echo 'nameserver $nameserver' >/tmp/bsdinstall_etc/resolv.conf
 }
 
-[ ! -d $distdir ] && mkdir -p $distdir
-[ ! -d $distdir ] && {
-	distdir="/opt$distdir"
-	mkdir -p $distdir || exit 1
-}
+if [ -n "$distdir" ]; then
+	if [ ! -d "$distdir" ]; then
+		mkdir -p "$distdir"
+		if [ ! -d "$distdir" ]; then
+			distdir="/opt$distdir"
+			mkdir -p "$distdir" || exit 1
+		fi
+	fi
+fi
 
 if [ "$memdisksize" != "0" ]; then
-  if [ -e "/dev/md$memdisknumber" ]; then
-    umount /dev/md$memdisknumber
-    mdconfig -d -u $memdisknumber
-  fi
-  if [ ! -e "/dev/md$memdisknumber" ]; then
-    mdconfig -a -s $memdisksize -u $memdisknumber
-    newfs -U /dev/md$memdisknumber
-    mount /dev/md$memdisknumber $distdir
-  fi
+	if [ -e "/dev/md$memdisknumber" ]; then
+		umount /dev/md$memdisknumber
+		mdconfig -d -u $memdisknumber
+	fi
+	if [ ! -e "/dev/md$memdisknumber" ]; then
+		mdconfig -a -s $memdisksize -u $memdisknumber
+		newfs -U /dev/md$memdisknumber
+		mount /dev/md$memdisknumber "$distdir"
+	fi
 fi
 
 # set our default zpool mirror-mode
@@ -210,8 +219,6 @@ check_size() {
 	if [ "${total_size}" -gt "${ref_disk_size}" ]; then
 		echo "ERROR: The current settings for the partitions sizes will not fit onto your disk."
 		exit 1
-#	else
-#		echo "unknown status!"
 	fi
 }
 
@@ -315,17 +322,11 @@ ls -l /dev/gpt/
 for disk in $provider; do
 	get_disk_labelname
 	# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
-  # todo need testing
-  # work for MBR  slice
-  #   https://forums.freebsd.org/threads/freebsd-10-not-booting-stuck-at-bios-screen.47368/
-  #  gpart set -a active $disk
-  # legacy
-	# echo 'a 1' | fdisk -f - $disk >/dev/null 2>&1
 done
 
 if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
-	sysctl vfs.zfs.min_auto_ashift=13	# need module zfs
+	sysctl vfs.zfs.min_auto_ashift=13 # need module zfs
 fi
 if ! $(/sbin/kldstat -m g_nop >/dev/null 2>/dev/null); then
 	/sbin/kldload geom_nop.ko >/dev/null 2>/dev/null
@@ -346,7 +347,7 @@ done
 # Show gnop output
 gnop list
 
-zpool_option="-o altroot=/mnt -o cachefile=/tmp/zpool.cache"
+zpool_option="-o altroot=$destdir -o cachefile=/tmp/zpool.cache"
 # Create the pool and the rootfs
 
 if [ "$mode" = "raidz" ]; then
@@ -393,9 +394,21 @@ zfs set freebsd:boot-environment=1 $poolname
 
 # Now we create some stuff we also would like to have in separate filesystems
 
-zfs set mountpoint=/mnt $poolname || exit 1
+zfs set mountpoint=$destdir $poolname || exit 1
+
+if [ -n "${url_file_zfs_skeleton}" ]; then
+	fetch "${url_file_zfs_skeleton}" | sh
+else
+	if [ -n "${file_zfs_skeleton}" ]; then
+		if [ -f "${file_zfs_skeleton}" ]; then
+			. "${file_zfs_skeleton}"
+		fi
+	fi
+fi
+
+if [ -z "${url_file_zfs_skeleton}" ] && [ -z "${file_zfs_skeleton}" ]; then
+
 zfs create $poolname/usr
-#zfs create $poolname/usr/home
 zfs create $poolname/var
 zfs create -o compression=on    -o exec=on      -o setuid=off   $poolname/tmp
 zfs create                      -o exec=on      -o setuid=off   $poolname/usr/ports
@@ -413,19 +426,21 @@ zfs create -o compression=gzip  -o exec=off     -o setuid=off   $poolname/var/ma
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/run
 zfs create                      -o exec=on      -o setuid=off   $poolname/var/tmp
 
+fi
+
 zpool export $poolname
 zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
 
 zfs list
 
-chmod 1777 /mnt/tmp
-cd /mnt || exit
-ln -s usr/home home
-chmod 1777 /mnt/var/tmp
+chmod 1777 $destdir/tmp
+cd $destdir || exit
+[ ! -d "$destdir/home" ] && ln -s usr/home home
+chmod 1777 $destdir/var/tmp
 
-mkdir -p /mnt/etc
+mkdir -p $destdir/etc
 ### Add swap info
-cat <<EOF >/mnt/etc/fstab
+cat <<EOF >$destdir/etc/fstab
 #/etc/fstab
 
 # Device		Mountpoint	FStype		Options	Dump	Pass#
@@ -435,25 +450,25 @@ if [ "$swap_partition_size" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  /dev/gpt/swap-${label}"
-		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>/mnt/etc/fstab
-#		swapon /dev/gpt/swap-${label}
+		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>$destdir/etc/fstab
+		#		swapon /dev/gpt/swap-${label}
 	done
 else
-	touch /mnt/etc/fstab
+	touch $destdir/etc/fstab
 fi
 
-cat /mnt/etc/fstab
+cat $destdir/etc/fstab
 
 ### Downloading system archive files
 
-cd ${DESTDIR:-/}
+cd ${destdir:-/}
 for file in ${filelist}; do
 	fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
 done
 
-cp /tmp/zpool.cache /mnt/boot/zfs/zpool.cache
+cp /tmp/zpool.cache $destdir/boot/zfs/zpool.cache
 
-cat <<EOF >/mnt/etc/rc.conf
+cat <<EOF >$destdir/etc/rc.conf
 zfs_enable="YES"
 hostname="$hostname"
 sshd_enable="YES"
@@ -463,7 +478,7 @@ EOF
 
 # apply DNS settings
 [ -n "$nameserver" ] && {
-  cat << EOF >/mnt/etc/resolvconf.conf
+	cat <<EOF >$destdir/etc/resolvconf.conf
 	nameserver $nameserver
 	nameserver "$nameserver"
 	resolv_conf_local_only="NO"
@@ -472,7 +487,7 @@ EOF
 }
 
 if [ "${iface_manual}" = "1" ] || [ "${iface_manual}" = "yes" ] || [ "${iface_manual}" = "YES" ]; then
-	cat <<EOF >>/mnt/etc/rc.conf
+	cat <<EOF >>$destdir/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
 ifconfig_DEFAULT="SYNCDHCP"
@@ -480,47 +495,64 @@ ifconfig_enc0="NOAUTO"
 
 EOF
 	for interface in ${iface}; do
-		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
+		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>$destdir/etc/rc.conf
 	done
-	echo ipv6_activate_all_interfaces=\"YES\" >>/mnt/etc/rc.conf
-	echo " " >>/mnt/etc/rc.conf
+	echo ipv6_activate_all_interfaces=\"YES\" >>$destdir/etc/rc.conf
+	echo " " >>$destdir/etc/rc.conf
 	if [ -n "${manual_gw_v6}" ] && [ -n "${manual_iface_v6}" ]; then
-		cat <<EOF >>/mnt/etc/rc.conf
+		cat <<EOF >>$destdir/etc/rc.conf
 ${manual_gw_v6}
 ${manual_iface_v6}
 
 EOF
 	fi
 else
-	echo 'ifconfig_DEFAULT="SYNCDHCP"'  >>/mnt/etc/rc.conf
-	echo 'ifconfig_enc0="NOAUTO"'       >>/mnt/etc/rc.conf
+	echo 'ifconfig_DEFAULT="SYNCDHCP"' >>$destdir/etc/rc.conf
+	echo 'ifconfig_enc0="NOAUTO"' >>$destdir/etc/rc.conf
 	for interface in ${iface}; do
-		echo ifconfig_$interface=\"DHCP\" >>/mnt/etc/rc.conf
-		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>/mnt/etc/rc.conf
+		echo ifconfig_$interface=\"DHCP\" >>$destdir/etc/rc.conf
+		echo ifconfig_${interface}_ipv6=\"inet6 accept_rtadv\" >>$destdir/etc/rc.conf
 	done
-	echo ipv6_activate_all_interfaces=\"YES\" >>/mnt/etc/rc.conf
-	echo " " >>/mnt/etc/rc.conf
+	echo ipv6_activate_all_interfaces=\"YES\" >>$destdir/etc/rc.conf
+	echo " " >>$destdir/etc/rc.conf
 fi
 
-cat /mnt/etc/rc.conf
+cat $destdir/etc/rc.conf
 
-# put sshd_key
-root_dir=/mnt/root/.ssh
+# put ssh_key
+root_dir=$destdir/root/.ssh
 mkdir ${root_dir} >>/dev/null
 chmod 700 ${root_dir}
-for url in ${url_ssh_key_list}; do
-	if (ping -q -c3 $(echo $url | awk -F/ '{print $3;}') >/dev/null 2>&1); then
-		for i in $(seq 1 9); do
-			fetch -qo - $url/key$i.pub >>${root_dir}/authorized_keys
-		done
-		chmod 600 ${root_dir}/authorized_keys
-		break
-	else
-		echo "no ping to host $(echo $url | awk -F/ '{print $3;}')"
-	fi
-done
+# ${ssh_key_dir}/key[1..9].pub
+if [ -n "${ssh_key_dir}" ]; then
+	for url in ${ssh_key_dir}; do
+		if (ping -q -c3 $(echo $url | awk -F/ '{print $3;}') >/dev/null 2>&1); then
+			for i in $(seq 1 9); do
+				fetch -qo - $url/key$i.pub >>${root_dir}/authorized_keys
+			done
+			chmod 600 ${root_dir}/authorized_keys
+			break
+		else
+			echo "no ping to host $(echo $url | awk -F/ '{print $3;}')"
+		fi
+	done
+fi
 
-cat <<EOF >>/mnt/boot/loader.conf
+if [ -n "${ssh_key_file}" ]; then
+	for ssh_key in ${ssh_key_file}; do
+		if (ping -q -c3 $(echo ${ssh_key} | awk -F/ '{print $3;}') >/dev/null 2>&1); then
+			for i in $(seq 1 9); do
+				fetch -qo - ${ssh_key} >>${root_dir}/authorized_keys
+			done
+			chmod 600 ${root_dir}/authorized_keys
+			break
+		else
+			echo "no ping to host $(echo ${ssh_key} | awk -F/ '{print $3;}')"
+		fi
+	done
+fi
+
+cat <<EOF >>$destdir/boot/loader.conf
 zfs_load="YES"
 vfs.root.mountfrom="zfs:$poolname"
 kern.geom.label.gptid.enable=0
@@ -544,7 +576,7 @@ EOF
 
 # If the memory is 3GB or less, then we reduce the allocated memory for ZFS
 if [ "$(sysctl -n hw.realmem)" -lt "$(((3 * 1024 * 1024 * 1024) + 2000))" ]; then
-	cat <<EOF >>/mnt/boot/loader.conf
+	cat <<EOF >>$destdir/boot/loader.conf
 # with 1-3 GB Memory
 vfs.zfs.arc_max="200M"
 #
@@ -552,7 +584,7 @@ EOF
 fi
 
 # Options for tmux
-echo "set-option -g history-limit 300000" >>/mnt/root/.tmux.conf
+echo "set-option -g history-limit 300000" >>$destdir/root/.tmux.conf
 
 zfs set readonly=on $poolname/var/empty
 
@@ -568,9 +600,9 @@ echo You\'ve just been chrooted into your fresh installation.
 echo passwd root
 
 cd /
-chroot /mnt /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/zoneinfo/$zoneinfo /etc/localtime;"
-echo "$password" | pw -V /mnt/etc usermod root -h 0
-chroot /mnt /bin/sh -c "cd /; umount /dev"
+chroot $destdir /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/timezone/$timezone /etc/localtime;"
+echo "$password" | pw -V $destdir/etc usermod root -h 0
+chroot $destdir /bin/sh -c "cd /; umount /dev"
 
 zfs umount -a
 zfs set mountpoint=legacy $poolname

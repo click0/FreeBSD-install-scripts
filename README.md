@@ -47,7 +47,8 @@ MfsBSD does **NOT** support IPv6.
     Full syntax:
     ```
     # sh go11_4k.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
-    [ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>  -P <new_password>]
+    [ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
+    -z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> ]
     [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
     ```
 
