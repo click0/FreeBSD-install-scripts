@@ -59,7 +59,7 @@ MfsBSD **НЕ** поддерживает IPv6.
         sh install_mfsbsd_iso.sh -m https://mfsbsd.vx.sk/files/iso/12/amd64/mfsbsd-12.2-RELEASE-amd64.iso -a 00eba73ac3a2940b533f2348da88d524 -p 'my_new_pass'
     Полный синтаксис:
     ```
-    # sh install_mfsbsd_iso.sh [-hv] [-m url_iso -a md5_iso] [-i network_iface] [-p 'myPassW0rD'] [-s need_free_space]
+    # sh install_mfsbsd_iso.sh [-hv] [-m url_iso -a md5_iso] [-H your_hostname] [-i network_iface] [-p 'myPassW0rD'] [-s need_free_space]
     ```
 
 - остальные скрипты без аргументов

@@ -69,10 +69,11 @@ check_free_space_boot() {
 
 usage() {
 	cat <<-EOF
-		Usage: $0 [-hv] [-m url_iso -a md5_iso] [-i network_iface] [-p 'myPassW0rD'] [-s need_free_space]
+		Usage: $0 [-hv] [-m url_iso -a md5_iso] [-H your_hostname] [-i network_iface] [-p 'myPassW0rD'] [-s need_free_space]
 	
 		  -a :  Md5 checksum rescue ISO
 		  -h    Show help
+		  -H    Set the hostname of the host. The default value is 'YOURHOSTNAME'.
 		  -v    Show version
 		  -i    Use a specific network interface if the machine has more than one.
 		        By default, a network interfaces is $INTERFACE.
@@ -169,7 +170,7 @@ cat << EOF >>${GRUB_CONFIG}
 		kfreebsd_module (loop)/boot/kernel/ahci.ko
 		kfreebsd_module (loop)/mfsroot.gz type=mfs_root
 		set kFreeBSD.vfs.root.mountfrom="ufs:/dev/md0"
-		set kFreeBSD.mfsbsd.HOSTNAME="$HOSTNAME"
+		set kFreeBSD.mfsbsd.hostname="$HOSTNAME"
 EOF
 if [ "$ip" = "127.0.0.1" ]; then
 	echo "set kFreeBSD.mfsbsd.autodhcp=\"YES\"" >>${GRUB_CONFIG}
