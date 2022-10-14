@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.43
+# Current Version: 1.45
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -50,7 +50,7 @@ set -x
 
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
-filelist="base lib32 kernel doc"
+filelist="base lib32 kernel"
 memdisknumber=10
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
