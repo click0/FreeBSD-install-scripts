@@ -88,7 +88,7 @@ usage() {
 	EOF
 }
 
-while getopts "a:hvi:m:p:s:" flags; do
+while getopts "a:hvi:H:m:p:s:" flags; do
 	case "${flags}" in
 	a)
 		ISO_HASH="${OPTARG}"
