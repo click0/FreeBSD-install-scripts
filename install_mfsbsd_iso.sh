@@ -88,7 +88,7 @@ usage() {
 	EOF
 }
 
-while getopts "a:hvi:m:p:s:" flags; do
+while getopts "a:hvi:H:m:p:s:" flags; do
 	case "${flags}" in
 	a)
 		ISO_HASH="${OPTARG}"
@@ -103,6 +103,9 @@ while getopts "a:hvi:m:p:s:" flags; do
 		;;
 	i)
 		INTERFACE="$INTERFACE ${OPTARG}"
+		;;
+	H)
+		HOSTNAME="${OPTARG}"
 		;;
 	m)
 		MFSBSDISO="${OPTARG}"
