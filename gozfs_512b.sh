@@ -51,6 +51,7 @@ set -x
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
 filelist="base lib32 kernel"
+filelist_optional="MANIFEST"			# only fetch
 memdisknumber=10
 #iface_manual=YES
 #manual_gw='defaultrouter="1.1.1.1"'			# gateway IP
@@ -440,7 +441,23 @@ cat $destdir/etc/fstab
 
 cd "${destdir:-/}" || exit
 for file in ${filelist}; do
-	fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+	if [ "x$distdir" = "x" ]; then
+		fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+	else
+		[ -e "$distdir/$file.txz" ] && (cat $distdir/$file.txz | tar --unlink -xpJf -)
+	fi
+done
+for file in ${filelist_optional}; do
+	if [ "x$distdir" = "x" ]; then
+		fetch -o "$destdir" "$ftphost/$file"
+	fi
+	if [ "$file" = "MANIFEST" ]; then
+		if [ "x$distdir" = "x" ]; then
+		    cp -a "$destdir/$file" /usr/freebsd-dist/
+		else
+			[ -e "$distdir/$file" ] && cp -a "$distdir/$file" /usr/freebsd-dist/
+		fi
+	fi
 done
 
 cp /tmp/zpool.cache $destdir/boot/zfs/zpool.cache
