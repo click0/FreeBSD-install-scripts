@@ -3,8 +3,8 @@ Here is a set of scripts intended for a guaranteed installation of the FreeBSD O
 
 ### Set composition
 ***
-- `go11.sh` - script to install FreeBSD on disks with block size 512.
-- `go11_4k.sh` - script to install FreeBSD on disks with block size 4k or 8k.
+- `gozfs_512b.sh` - script to install FreeBSD on disks with block size 512 bytes.
+- `gozfs.sh` - script to install FreeBSD on disks with block size 4k or 8k bytes.
 - `install_mfsbsd_img_to_sda.sh` - script to write [MfsBSD](https://mfsbsd.vx.sk) .img _to a running_ Linux system on the first HDD (with non-guaranteed results)
 - `install_mfsbsd_iso.sh` - script to write [MfsBSD](https://mfsbsd.vx.sk) ISO _on a running_ Linux system
 - `mfsbsd_repack.sh` - script for repacking the MfsBSD image with the addition of network settings.

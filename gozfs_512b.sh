@@ -110,7 +110,7 @@ if [ -z "$devcount" ] || [ "$devcount" = ' ' ] || [ "$devcount" = "0" ]; then
 	exit
 fi
 
-#[ -z "$distdir" ] && distdir="/mfs" # deprecated
+#[ -z "$distdir" ] && distdir="/mfs"
 [ -z "$ftphost" ] && ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 [ -z "$timezone" ] && timezone="Europe/Kiev"
 [ -z "$memdisksize" ] && memdisksize=350M # deprecated
@@ -143,7 +143,7 @@ sysctl kern.geom.debugflags=16
 
 [ -n "$nameserver" ] && {
 	mkdir -p /tmp/bsdinstall_etc
-	echo 'nameserver $nameserver' >/tmp/bsdinstall_etc/resolv.conf
+	echo "nameserver $nameserver" >/tmp/bsdinstall_etc/resolv.conf
 }
 
 if [ -n "$distdir" ]; then
@@ -298,14 +298,14 @@ fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
 counter=0
+if [ "$mode" = "raid10" ]; then
+	labellist=" mirror "
+fi
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
 	gpart add -t freebsd-zfs ${size_string} -l system-${label} ${disk} >/dev/null
 
-	if [ "$counter" -eq "0" -a "$mode" = "raid10" ]; then
-		labellist="${labellist} mirror "
-	fi
 	counter=$((counter + 1))
 	labellist="${labellist} gpt/system-${label}"
 	if [ "$(expr $counter % 2)" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
@@ -436,7 +436,7 @@ cat $destdir/etc/fstab
 
 ### Downloading system archive files
 
-cd ${destdir:-/}
+cd "${destdir:-/}" || exit
 for file in ${filelist}; do
 	fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
 done
