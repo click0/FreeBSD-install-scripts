@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.45
+# Current Version: 1.49
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
