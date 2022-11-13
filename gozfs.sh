@@ -121,8 +121,10 @@ fi
 [ -z "$offset" ] && offset="2048" # remainder at the end of the disc, 1 MB
 destdir=${destdir:-/mnt}
 
-# autodetect
-iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' -e 's/  / /g')"}
+# autodetect physical network interfaces
+iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' \
+-e 's/fwe[0-9]*//' -e 's/fwip[0-9]*//' -e 's/ipfw[0-9]*//' -e 's/pflog[0-9]*//' -e 's/plip[0-9]*//' \
+-e 's/stf[0-9]*//' -e 's/lagg[0-9]*//' -e 's/  / /g')"}
 iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
 
 if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
