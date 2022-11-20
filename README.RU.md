@@ -15,7 +15,7 @@
 
 Для установки используется стандартный образ MfsBSD, где есть приложение `tmux` и доступы `root/mfsroot`.  
 Сами архивы FreeBSD нам в образе не нужны, мы их отдельно скачаем со своего или публичного http сервера.  
-Доступы к новой системе, если в аргументах не задали новый пароль, после установки скриптами `go11.sh`/`go11_4k.sh` - `root/mfsroot123`.  
+Доступы к новой системе, если в аргументах не задали новый пароль, после установки скриптами `gozfs.sh`/`gozfs_512b.sh` - `root/mfsroot123`.  
 MfsBSD **НЕ** поддерживает IPv6.
 
 ### Стратегии использования
@@ -23,9 +23,9 @@ MfsBSD **НЕ** поддерживает IPv6.
 
 ##### Если работает DHCP
 
-1. есть rescue FreeBSD с ZFS ==> ставим через `go11_4k.sh`
+1. есть rescue FreeBSD с ZFS ==> ставим через `gozfs.sh`
 2. есть rescue FreeBSD без ZFS ==> пишем MfsBSD.img сразу на /dev/ada0
-3. есть возможность грузить ISO ==> грузим MfsBSD и внутри него ставим через `go11_4k.sh`
+3. есть возможность грузить ISO ==> грузим MfsBSD и внутри него ставим через `gozfs.sh`
 4. есть установленная Linux ==> то через GRUB, ISO MfsBSD, kFreeBSD
 5. есть rescue Linux ==> тогда в vKVM (статически слинкованный qemu) грузим ISO MfsBSD, пробрасываем /dev/sda, через ssh или VNC клиент устанавливаем с ISO систему, потом правим сеть и пробуем перегрузить хост машину.
 
@@ -33,20 +33,20 @@ MfsBSD **НЕ** поддерживает IPv6.
 
 6. есть установленная Linux ==> то через GRUB, ISO MfsBSD, kFreeBSD
 7. есть rescue FreeBSD с ZFS ==> перепаковываем MfsBSD.img и потом пишем этот образ на /dev/ada0
-8. есть возможность грузить ISO ==> модифицируем MfsBSD ISO, грузимся с нашего образа и с него ставим систему через `go11_4k.sh`
+8. есть возможность грузить ISO ==> модифицируем MfsBSD ISO, грузимся с нашего образа и с него ставим систему через `gozfs.sh`
 
 ### Синтаксис скриптов
 
-- `go11.sh`/`go11_4k.sh`
+- `gozfs.sh`/`gozfs_512b.sh`
   
-        sh go11_4k.sh -p vtbd0 -s4G -n zroot  
+        sh gozfs.sh -p vtbd0 -s4G -n zroot  
     или  
   
-        sh go11_4k.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
+        sh gozfs.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
 
     Полный синтаксис:
     ```
-    # sh go11_4k.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
+    # sh gozfs.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
     [ -m <zpool-raidmode> -d <distdir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password>]
     [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
     ```
@@ -74,7 +74,7 @@ MfsBSD **НЕ** поддерживает IPv6.
 [MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
-- `go11.sh`
+- `gozfs_512b.sh`
 - `mfsbsd_repack.sh`
 
 #### Автор:

@@ -15,7 +15,7 @@ Here is a set of scripts intended for a guaranteed installation of the FreeBSD O
 
 For installation, a standard MfsBSD image is used, where there is a `tmux` application and `root/mfsroot` accesses.  
 We do not need the FreeBSD archives in the image, we will download them separately from our own or public http server.  
-Access to the new system, if no new password was specified in the arguments, after setting the scripts `go11.sh`/`go11_4k.sh` - `rootmfsroot123`.  
+Access to the new system, if no new password was specified in the arguments, after setting the scripts `gozfs.sh`/`gozfs_512b.sh` - `rootmfsroot123`.  
 MfsBSD does **NOT** support IPv6.
 
 ### Usage strategies
@@ -23,9 +23,9 @@ MfsBSD does **NOT** support IPv6.
 
 ##### If DHCP works
 
-1. there is rescue FreeBSD with ZFS ==> install via `go11_4k.sh`
+1. there is rescue FreeBSD with ZFS ==> install via `gozfs.sh`
 2. there is rescue FreeBSD without ZFS ==> write MfsBSD.img directly to /dev/ada0
-3. it is possible to load ISO ==> load MfsBSD and install inside it via `go11_4k.sh`
+3. it is possible to load ISO ==> load MfsBSD and install inside it via `gozfs.sh`
 4. there is Linux installed ==> then via GRUB, ISO MfsBSD, kFreeBSD
 5. there is rescue Linux ==> then in vKVM (statically linked qemu) we load ISO MfsBSD, we forward /dev/sda, through ssh or VNC the client install with ISO system, then we correct a network and we try to reboot a host machine.
 
@@ -33,20 +33,20 @@ MfsBSD does **NOT** support IPv6.
 
 6. there is Linux installed ==> then via GRUB, ISO MfsBSD, kFreeBSD
 7. there is rescue FreeBSD with ZFS ==> repack MfsBSD.img and then write this image to /dev/ada0
-8. it is possible to load ISO ==> modify MfsBSD ISO, boot from our image and install the system from it via `go11_4k.sh`
+8. it is possible to load ISO ==> modify MfsBSD ISO, boot from our image and install the system from it via `gozfs.sh`
 
 ### Script syntax
 
-- `go11.sh`/`go11_4k.sh`
+- `gozfs.sh`/`gozfs_512b.sh`
   
-        sh go11_4k.sh -p vtbd0 -s4G -n zroot
+        sh gozfs.sh -p vtbd0 -s4G -n zroot
   or
   
-        sh go11_4k.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
+        sh gozfs.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
 
     Full syntax:
     ```
-    # sh go11_4k.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
+    # sh gozfs.sh -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
     [ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk> -P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
     -z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> ]
     [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
@@ -75,7 +75,7 @@ MfsBSD does **NOT** support IPv6.
 [MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
-- `go11.sh`
+- `gozfs_512b.sh`
 - `mfsbsd_repack.sh`
 
 #### Author:
