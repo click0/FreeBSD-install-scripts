@@ -71,8 +71,8 @@ MfsBSD does **NOT** support IPv6.
     Convert_UFS_to_ZFS.sh
 
 ###### Source resources:
-[freebsd_81_zfs_install.sh](https://github.com/clickbg/scripts/blob/c5c90b8475ba32337de9fdb8808113d32f922454/FreeBSD/freebsd_81_zfs_install.sh)
-[MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
+- [freebsd_81_zfs_install.sh](https://github.com/clickbg/scripts/blob/c5c90b8475ba32337de9fdb8808113d32f922454/FreeBSD/freebsd_81_zfs_install.sh)  
+- [MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
 - `gozfs_512b.sh`
@@ -84,7 +84,7 @@ MfsBSD does **NOT** support IPv6.
 
 ### 🤝 Contributing
 
-Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](https://github.com/click0/domain-check-2/issues).
+Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](https://github.com/click0/FreeBSD-install-scripts/issues).
 
 ### Show your support
 
