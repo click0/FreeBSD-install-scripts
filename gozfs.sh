@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.49
+# Current Version: 1.51
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -402,6 +402,7 @@ if [ -n "${url_file_zfs_skeleton}" ]; then
 else
 	if [ -n "${file_zfs_skeleton}" ]; then
 		if [ -f "${file_zfs_skeleton}" ]; then
+			# shellcheck source=zfs_skeleton.example
 			. "${file_zfs_skeleton}"
 		fi
 	fi
