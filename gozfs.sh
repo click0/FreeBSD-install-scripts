@@ -296,10 +296,11 @@ if [ "${swap_partition_size}" ]; then
 fi
 
 ###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
-if [ -n "${zfs_partition_size}" ]; then
+last_partition_disk_size=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $2}')
+if [ "${zfs_partition_size}" -a "${last_partition_disk_size}" -le "${smallest_disk_size}" ]; then
 	size_string="-s $((zfs_partition_size - offset))"
 else
-	size_string="-s $((smallest_disk_size - offset))"
+	size_string="-s $((last_partition_disk_size - offset))"
 fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
