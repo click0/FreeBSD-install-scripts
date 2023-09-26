@@ -130,16 +130,17 @@ iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
 
 if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
 	gateway=$(netstat -rn4 | awk '/default/{print $2;}')
-	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
+	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2 }' | head -1)
+	net_mask=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $4 }' | head -1)
 fi
 
 [ "$gateway" = "DHCP" ] && gateway=''
 [ "${ip_address}" = "DHCP" ] && ip_address=''
 
-if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
+if [ -n "$gateway" ] && [ -n "${ip_address}" ] && [ -n "${net_mask}" ]; then
 	iface_manual=yes
 	manual_gw="defaultrouter=\"$gateway\""                      # gateway IP
-	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\"" # interface IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address} netmask ${net_mask}\"" # interface IP and netmask
 fi
 
 sysctl kern.geom.label.gptid.enable=0
