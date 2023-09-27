@@ -559,9 +559,7 @@ fi
 if [ -n "${ssh_key_file}" ]; then
 	for ssh_key in ${ssh_key_file}; do
 		if (ping -q -c3 $(echo ${ssh_key} | awk -F/ '{print $3;}') >/dev/null 2>&1); then
-			for i in $(seq 1 9); do
-				fetch -qo - ${ssh_key} >>${root_dir}/authorized_keys
-			done
+			fetch -qo - ${ssh_key} >>${root_dir}/authorized_keys
 			chmod 600 ${root_dir}/authorized_keys
 			break
 		else
