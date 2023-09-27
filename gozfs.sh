@@ -466,14 +466,14 @@ cat $destdir/etc/fstab
 cd "${destdir:-/}" || exit
 for file in ${filelist}; do
 	if [ "x$distdir" = "x" ]; then
-		fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+		(fetch --retry -o - "$ftphost/$file.txz" | tar --unlink -xpJf -) || exit
 	else
 		[ -e "$distdir/$file.txz" ] && (cat $distdir/$file.txz | tar --unlink -xpJf -)
 	fi
 done
 for file in ${filelist_optional}; do
 	if [ "x$distdir" = "x" ]; then
-		fetch -o "$destdir" "$ftphost/$file"
+		fetch --retry -o "$destdir" "$ftphost/$file"
 	fi
 	if [ "$file" = "MANIFEST" ]; then
 		if [ "x$distdir" = "x" ]; then
