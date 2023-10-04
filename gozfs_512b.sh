@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.49
+# Current Version: 1.53
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -128,16 +128,17 @@ iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
 
 if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
 	gateway=$(netstat -rn4 | awk '/default/{print $2;}')
-	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2}' | head -1)
+	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2 }' | head -1)
+	net_mask=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $4 }' | head -1)
 fi
 
 [ "$gateway" = "DHCP" ] && gateway=''
 [ "${ip_address}" = "DHCP" ] && ip_address=''
 
-if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
+if [ -n "$gateway" ] && [ -n "${ip_address}" ] && [ -n "${net_mask}" ]; then
 	iface_manual=yes
 	manual_gw="defaultrouter=\"$gateway\""                      # gateway IP
-	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\"" # interface IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address} netmask ${net_mask}\"" # interface IP and netmask
 fi
 
 sysctl kern.geom.label.gptid.enable=0
@@ -293,10 +294,11 @@ if [ "${swap_partition_size}" ]; then
 fi
 
 ###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
-if [ -n "${zfs_partition_size}" ]; then
+last_partition_disk_size=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $2}')
+if [ "${zfs_partition_size}" -a "${last_partition_disk_size}" -le "${smallest_disk_size}" ]; then
 	size_string="-s $((zfs_partition_size - offset))"
 else
-	size_string="-s $((smallest_disk_size - offset))"
+	size_string="-s $((last_partition_disk_size - offset))"
 fi
 
 echo "Creating GPT ZFS partition on with size ${zfs_partition_size} on disks: "
@@ -379,6 +381,7 @@ if [ -n "${url_file_zfs_skeleton}" ]; then
 else
 	if [ -n "${file_zfs_skeleton}" ]; then
 		if [ -f "${file_zfs_skeleton}" ]; then
+			# shellcheck source=zfs_skeleton.example
 			. "${file_zfs_skeleton}"
 		fi
 	fi
@@ -442,14 +445,14 @@ cat $destdir/etc/fstab
 cd "${destdir:-/}" || exit
 for file in ${filelist}; do
 	if [ "x$distdir" = "x" ]; then
-		fetch -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+		fetch --retry -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
 	else
 		[ -e "$distdir/$file.txz" ] && (cat $distdir/$file.txz | tar --unlink -xpJf -)
 	fi
 done
 for file in ${filelist_optional}; do
 	if [ "x$distdir" = "x" ]; then
-		fetch -o "$destdir" "$ftphost/$file"
+		fetch --retry -o "$destdir" "$ftphost/$file"
 	fi
 	if [ "$file" = "MANIFEST" ]; then
 		if [ "x$distdir" = "x" ]; then
@@ -535,9 +538,7 @@ fi
 if [ -n "${ssh_key_file}" ]; then
 	for ssh_key in ${ssh_key_file}; do
 		if (ping -q -c3 $(echo ${ssh_key} | awk -F/ '{print $3;}') >/dev/null 2>&1); then
-			for i in $(seq 1 9); do
-				fetch -qo - ${ssh_key} >>${root_dir}/authorized_keys
-			done
+			fetch -qo - ${ssh_key} >>${root_dir}/authorized_keys
 			chmod 600 ${root_dir}/authorized_keys
 			break
 		else
@@ -594,7 +595,9 @@ echo You\'ve just been chrooted into your fresh installation.
 echo passwd root
 
 cd /
-chroot $destdir /bin/sh -c "hostname $hostname; make -C /etc/mail aliases; cp /usr/share/timezone/$timezone /etc/localtime;"
+[ -d /usr/share/zoneinfo ] && file_timezone=/usr/share/zoneinfo/$timezone;
+chroot $destdir /bin/sh -c "hostname $hostname; make -C /etc/mail aliases;
+[ -e "${file_timezone}" ] && ln -s ${file_timezone} /etc/localtime;"
 echo "$password" | pw -V $destdir/etc usermod root -h 0
 chroot $destdir /bin/sh -c "cd /; umount /dev"
 
