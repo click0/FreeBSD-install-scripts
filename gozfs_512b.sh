@@ -447,7 +447,7 @@ cat $destdir/etc/fstab
 cd "${destdir:-/}" || exit
 for file in ${filelist}; do
 	if [ "x$distdir" = "x" ]; then
-		fetch --retry -o - "$ftphost/$file.txz" | tar --unlink -xpJf -
+		(fetch --retry -o - "$ftphost/$file.txz" | tar --unlink -xpJf -) || exit
 	else
 		[ -e "$distdir/$file.txz" ] && (cat $distdir/$file.txz | tar --unlink -xpJf -)
 	fi
