@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.53
+# Current Version: 1.55
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -84,8 +84,8 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:z:Z:k:K: arg; do
 	m) mode=${OPTARG} ;;
 	M) memdisksize=${OPTARG} ;;
 	o) offset=${OPTARG} ;;
-	d) distdir=${OPTARG} ;;
-	D) destdir=${OPTARG} ;;
+	d) distdir=${OPTARG} ;;	# source of local system archives
+	D) destdir=${OPTARG} ;;	# mount point of the new pool
 	t) timezone=${OPTARG} ;;
 	g) gateway=${OPTARG} ;;
 	i) iface=${OPTARG} ;;
@@ -118,8 +118,9 @@ fi
 [ -z "$memdisksize" ] && memdisksize=350M # deprecated
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
-[ -z "$ashift" ] && ashift=4k     # 4k or 8k
-[ -z "$offset" ] && offset="2048" # remainder at the end of the disc, 1 MB
+[ -z "$ashift" ] && ashift="4k"		# 4k or 8k
+[ -z "$offset" ] && offset="2048"	# remainder at the end of the disc, 1 MB
+									# 1 MB approximately for every full and partial 1 TB of disk capacity.
 destdir=${destdir:-/mnt}
 
 # autodetect physical network interfaces
