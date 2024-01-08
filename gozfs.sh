@@ -245,6 +245,8 @@ for disk in $provider; do
 	fi
 	echo " -> $disk"
 	# against PR 196102
+	# todo need to do tests
+	gpart recover /dev/$disk
 	if (gpart show /dev/$disk | egrep -v '=>| - free -|^$'); then
 		disk_index_list="$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)"
 		for disk_index in ${disk_index_list}; do
