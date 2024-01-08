@@ -162,7 +162,7 @@ if [ -n "$distdir" ]; then
 	fi
 fi
 
-if [ "$memdisksize" != "0" ]; then
+if [ "$memdisksize" != "0" ] && [ -n "$distdir" ]; then
 	if [ -e "/dev/md$memdisknumber" ]; then
 		umount /dev/md$memdisknumber
 		mdconfig -d -u $memdisknumber
