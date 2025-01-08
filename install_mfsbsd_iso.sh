@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # Copyright
-# Vladislav V. Prodan <github.com/click0>
+# Vladyslav V. Prodan <github.com/click0>
 # https://support.od.ua
-# 2018-2022
+# 2018-2025
 
 script_type="self-contained"
 # shellcheck disable=SC2034
-version_script="1.21"
+version_script="1.25"
 
 set -eo
 
@@ -22,9 +22,9 @@ print_version() {
 }
 
 HOSTNAME="YOURHOSTNAME"
-MFSBSDISO="https://mfsbsd.vx.sk/files/iso/12/amd64/mfsbsd-12.2-RELEASE-amd64.iso"
+MFSBSDISO="https://mfsbsd.vx.sk/files/iso/14/amd64/mfsbsd-14.0-RELEASE-amd64.iso"
 INTERFACE="em0" # or vtnet0
-NEED_FREE_SPACE="90" # in megabytes!
+NEED_FREE_SPACE="99" # in megabytes!
 DIR_ISO=/boot/images
 GRUB_CONFIG=/etc/grub.d/40_custom
 # url2=http://otrada.od.ua/FreeBSD/LiveCD/mfsbsd
@@ -35,6 +35,7 @@ network_settings() {
 		egrep -v "^(10|127\.0|192\.168|172\.16)\." | cut -d/ -f1 | head -1)
 	ip=${ip:-"127.0.0.1"}
 	ipv6=$(ip addr show | grep "inet6\b" | grep -v "\bscope host" | awk '{print $2}' | egrep -v '^::1|^fe' | head -1)
+	ipv6=${ipv6:-"::1"}
 	ip_mask_short=$(ip addr show | grep "inet\b" | grep -v "\blo" | awk '{print $2}' |
 		egrep -v "^(10|127\.0|192\.168|172\.16)\." | cut -d/ -f2 | head -1)
 
@@ -72,10 +73,9 @@ usage() {
 		Usage: $0 [-hv] [-m url_iso -a md5_iso] [-H your_hostname] [-i network_iface] [-p 'myPassW0rD'] [-s need_free_space]
 	
 		  -a :  Md5 checksum rescue ISO
-		  -h    Show help
-		  -H    Set the hostname of the host. The default value is 'YOURHOSTNAME'.
-		  -v    Show version
-		  -i    Use a specific network interface if the machine has more than one.
+		  -h :  Show help
+		  -H :  Set the hostname of the host. The default value is 'YOURHOSTNAME'.
+		  -i :  Use a specific network interface if the machine has more than one.
 		        By default, a network interfaces is $INTERFACE.
 		  -m :  URL of mfsbsd image (defaults to image on https://mfsbsd.vx.sk)
 		        For example, ISO $MFSBSDISO.
@@ -84,7 +84,8 @@ usage() {
 		        By default, MfsBSD's password is 'mfsroot'.
 		  -s :  How much more do you need to check the availability of free disk space.
 		        Supported suffixes are 'M' for MiB (by default) and 'G' for GiB.
-	
+		  -v :  Show version
+
 	EOF
 }
 
@@ -101,11 +102,11 @@ while getopts "a:hvi:H:m:p:s:" flags; do
 		print_version
 		exit 0
 		;;
-	i)
-		INTERFACE="$INTERFACE ${OPTARG}"
-		;;
 	H)
 		HOSTNAME="${OPTARG}"
+		;;
+	i)
+		INTERFACE="$INTERFACE ${OPTARG}"
 		;;
 	m)
 		MFSBSDISO="${OPTARG}"
@@ -131,6 +132,8 @@ case ${FILENAME_ISO} in
 mfsbsd-12.2-RELEASE-amd64.iso) ISO_HASH=00eba73ac3a2940b533f2348da88d524 ;;
 mfsbsd-13.0-RELEASE-amd64.iso) ISO_HASH=149ca4ecf9b39af7218481d13c3325b4 ;;
 mfsbsd-13.1-RELEASE-amd64.iso) ISO_HASH=128ad6b7cc8cb0f163e293d570136e93 ;;
+mfsbsd-13.2-RELEASE-amd64.iso) ISO_HASH=def450bae216370b68d98759b2b9e331 ;;
+mfsbsd-14.0-RELEASE-amd64.iso) ISO_HASH=bffaf11a441105b54823981416ae0166 ;;
 esac
 
 check_free_space_boot
@@ -189,12 +192,21 @@ if [ "$ip" != "127.0.0.1" ]; then
 	set kFreeBSD.mfsbsd.interfaces="ext1"
 	set kFreeBSD.mfsbsd.ifconfig_ext1="inet $ip/${ip_mask_short}"
 	set kFreeBSD.mfsbsd.defaultrouter="${ip_default}"
+	set kFreeBSD.mfsbsd.nameservers="8.8.8.8 1.1.1.1"
 EOF
 fi
+if [ -n "$ipv6" ] && [ "$ipv6" != "::1" ] && [ -n "${ipv6_default}" ] ; then
+	cat << EOF >>${GRUB_CONFIG}
+	set kFreeBSD.mfsbsd.interfaces="ext1"
+	set kFreeBSD.mfsbsd.ifconfig_ext1="inet6 $ipv6"
+	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
+	# or
+	# set kFreeBSD.mfsbsd.ipv6_defaultrouter="fe80::1%ext1"
+	set kFreeBSD.mfsbsd.nameservers="2001:4860:4860::8888 2606:4700:4700::1111"
+EOF
+
+fi
 cat << EOF >>${GRUB_CONFIG}
-	set kFreeBSD.mfsbsd.nameservers="8.8.8.8 1.1.1.1"
-	#	set kFreeBSD.mfsbsd.ifconfig_lo0="DHCP" #wtf?
-	#	set kFreeBSD.mfsbsd.ipv6_defaultrouter="${ipv6_default}"
 	# Define a new root password
 	set kFreeBSD.mfsbsd.rootpw="${PASSWORD}"
 
