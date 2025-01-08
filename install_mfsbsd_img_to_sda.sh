@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # Copyright
-# Vladislav V. Prodan <github.com/click0>
+# Vladyslav V. Prodan <github.com/click0>
 # https://support.od.ua
-# 2022
+# 2022-2025
 
 
 # source:
@@ -18,7 +18,6 @@ mkdir -p ${dir_ram_disk}
 chmod 777 ${dir_ram_disk}
 mount -t tmpfs -o size=${dir_ram_disk_size} myramdisk ${dir_ram_disk}
 
-cd ${dir_ram_disk} && wget ${url_img} &&\
+cd ${dir_ram_disk} && wget ${url_img} && echo u > /proc/sysrq-trigger &&\
  	 dd conv=fsync if=${dir_ram_disk}/"${url_img##*/}" of=/dev/${disk} &&\
  	 echo b > /proc/sysrq-trigger
-
