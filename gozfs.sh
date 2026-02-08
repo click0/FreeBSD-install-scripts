@@ -46,7 +46,7 @@
 # regards.
 # olaf.
 
-set -x
+[ "${DEBUG:-}" = "1" ] && set -x
 
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
@@ -67,8 +67,7 @@ usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_s
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
 
 exerr() {
-	# shellcheck disable=SC2039
-	echo -e "$*" >&2
+	printf '%b\n' "$*" >&2
 	exit 1
 }
 
@@ -102,19 +101,17 @@ shift "$((OPTIND-1))"
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
 	exerr "${usage}"
-	exit
 fi
 
 # count the number of providers
 devcount=$(echo "${provider}" | xargs -n1 | sort -u | xargs | wc -w | tr -d ' ')
 if [ -z "$devcount" ] || [ "$devcount" = ' ' ] || [ "$devcount" = "0" ]; then
 	exerr "${usage}"
-	exit
 fi
 
 #[ -z "$distdir" ] && distdir="/mfs"
 [ -z "$ftphost" ] && ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
-[ -z "$timezone" ] && timezone="Europe/Kiev"
+[ -z "$timezone" ] && timezone="Europe/Kyiv"
 [ -z "$memdisksize" ] && memdisksize=350M # deprecated
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
@@ -177,13 +174,12 @@ fi
 
 # set our default zpool mirror-mode
 if [ -z "$mode" ]; then
-	if [ "$devcount" -gt "1" ]; then
-		mode='mirror'
-	fi
-	if [ "$devcount" -eq "4" ]; then
+	if [ "$devcount" -eq "1" ]; then
+		mode='stripe'
+	elif [ "$devcount" -eq "4" ]; then
 		mode='raid10'
 	else
-		mode='stripe'
+		mode='mirror'
 	fi
 fi
 echo $mode
@@ -191,21 +187,21 @@ echo $mode
 sleep 1
 
 # check the settings for the users that want to set the mode on their own
-if [ "$devcount" -eq "1" -a "$mode" = "mirror" ]; then
+if [ "$devcount" -eq "1" ] && [ "$mode" = "mirror" ]; then
 	echo "A mirror needs at least two disks!"
-	exit
+	exit 1
 fi
-if [ "$devcount" -lt "3" -a "$mode" = "raidz" ]; then
+if [ "$devcount" -lt "3" ] && [ "$mode" = "raidz" ]; then
 	echo "Sorry, you need at least three disks for a zfs raidz!"
-	exit
+	exit 1
 fi
-if [ "$devcount" -lt "4" -a "$mode" = "raid10" ]; then
+if [ "$devcount" -lt "4" ] && [ "$mode" = "raid10" ]; then
 	echo "Sorry, you need at least four disks for a raid10 equivalent szenario!"
-	exit
+	exit 1
 fi
-if [ "$((devcount % 2))" -ne "0" -a "$mode" = "raid10" ]; then
+if [ "$((devcount % 2))" -ne "0" ] && [ "$mode" = "raid10" ]; then
 	echo "Sorry, you need an even number of disks for a raid10 equivalent szenario!"
-	exit
+	exit 1
 fi
 
 check_size() {
@@ -248,8 +244,8 @@ for disk in $provider; do
 	# against PR 196102
 	# todo need to do tests
 	gpart recover /dev/$disk
-	if (gpart show /dev/$disk | egrep -v '=>| - free -|^$'); then
-		disk_index_list="$(gpart show /dev/$disk | egrep -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)"
+	if (gpart show /dev/$disk | grep -E -v '=>| - free -|^$'); then
+		disk_index_list="$(gpart show /dev/$disk | grep -E -v '=>| - free -|^$' | awk '{print $3;}' | sort -r)"
 		for disk_index in ${disk_index_list}; do
 			gpart delete -i ${disk_index} /dev/$disk || exit 1
 		done
@@ -300,7 +296,7 @@ fi
 
 ###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
 last_partition_disk_size=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $2}')
-if [ "${zfs_partition_size}" -a "${last_partition_disk_size}" -le "${smallest_disk_size}" ]; then
+if [ "${zfs_partition_size}" ] && [ "${last_partition_disk_size}" -le "${smallest_disk_size}" ]; then
 	size_string="-s $((zfs_partition_size - offset))"
 else
 	size_string="-s $((last_partition_disk_size - offset))"
@@ -318,7 +314,7 @@ for disk in $provider; do
 
 	counter=$((counter + 1))
 	labellist="${labellist} gpt/system-${label}.nop"
-	if [ "$(expr $counter % 2)" -eq "0" -a "$devcount" -ne "$counter" -a "$mode" = "raid10" ]; then
+	if [ "$((counter % 2))" -eq "0" ] && [ "$devcount" -ne "$counter" ] && [ "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
 done
@@ -327,10 +323,7 @@ done
 ls -l /dev/gpt/
 
 # Make first partition active so the BIOS boots from it
-for disk in $provider; do
-	get_disk_labelname
-	# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
-done
+# see https://forums.freebsd.org/threads/freebsd-gpt-uefi.42781/#post-238472
 
 if ! $(/sbin/kldstat -m zfs >/dev/null 2>/dev/null); then
 	/sbin/kldload zfs >/dev/null 2>/dev/null
@@ -371,7 +364,7 @@ fi
 
 if [ "$(zpool list -H -o name $poolname)" != "$poolname" ]; then
 	echo "ERROR: Could not create zpool $poolname"
-	exit
+	exit 1
 fi
 
 zpool export $poolname
@@ -401,7 +394,7 @@ zfs set freebsd:boot-environment=1 $poolname
 zfs set mountpoint=$destdir $poolname || exit 1
 
 if [ -n "${url_file_zfs_skeleton}" ]; then
-	fetch "${url_file_zfs_skeleton}" | sh
+	fetch -o /tmp/zfs_skeleton.sh "${url_file_zfs_skeleton}" && sh /tmp/zfs_skeleton.sh
 else
 	if [ -n "${file_zfs_skeleton}" ]; then
 		if [ -f "${file_zfs_skeleton}" ]; then
@@ -455,7 +448,7 @@ if [ "$swap_partition_size" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  /dev/gpt/swap-${label}"
-		echo -e "/dev/gpt/swap-${label}	none		swap	sw	0	0" >>$destdir/etc/fstab
+		printf '/dev/gpt/swap-%s\tnone\t\tswap\tsw\t0\t0\n' "${label}" >>"$destdir/etc/fstab"
 		#		swapon /dev/gpt/swap-${label}
 	done
 else
@@ -471,7 +464,7 @@ for file in ${filelist}; do
 	if [ "x$distdir" = "x" ]; then
 		(fetch --retry -o - "$ftphost/$file.txz" | tar --unlink -xpJf -) || exit
 	else
-		[ -e "$distdir/$file.txz" ] && (cat $distdir/$file.txz | tar --unlink -xpJf -)
+		[ -e "$distdir/$file.txz" ] && tar --unlink -xpJf "$distdir/$file.txz"
 	fi
 done
 for file in ${filelist_optional}; do
@@ -493,7 +486,7 @@ cat <<EOF >$destdir/etc/rc.conf
 zfs_enable="YES"
 hostname="$hostname"
 sshd_enable="YES"
-sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthentication=yes -oProtocol=2 -oUseDNS=no"
+sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthentication=yes -oUseDNS=no"
 dumpdev="AUTO"
 EOF
 
@@ -542,7 +535,7 @@ cat $destdir/etc/rc.conf
 
 # put ssh_key
 root_dir=$destdir/root/.ssh
-mkdir ${root_dir} >>/dev/null
+mkdir -p "${root_dir}" >/dev/null 2>&1
 chmod 700 ${root_dir}
 # ${ssh_key_dir}/key[1..9].pub
 if [ -n "${ssh_key_dir}" ]; then
