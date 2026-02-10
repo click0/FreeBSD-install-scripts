@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Current Version: 1.55
+# Current Version: 1.56
 
 # original script by Philipp Wuensche at http://anonsvn.h3q.com/s/gpt-zfsroot.sh
 # This script is considered beer ware (http://en.wikipedia.org/wiki/Beerware)
@@ -62,16 +62,18 @@ memdisknumber=10
 
 usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
 [ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk>
--P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
+-B <boot_mode> -P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
 -z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> ]
-[ -g <gateway> [-i <iface>] -I <IP_address/mask> ]"
+[ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
+
+boot_mode: auto (default), bios, uefi, hybrid"
 
 exerr() {
 	printf '%b\n' "$*" >&2
 	exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:z:Z:k:K: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:B:z:Z:k:K: arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -89,6 +91,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:z:Z:k:K: arg; do
 	g) gateway=${OPTARG} ;;
 	i) iface=${OPTARG} ;;
 	I) ip_address=${OPTARG} ;;
+	B) boot_mode=${OPTARG} ;;
 	z) file_zfs_skeleton=${OPTARG} ;;
 	Z) url_file_zfs_skeleton=${OPTARG} ;;
 	k) ssh_key_file="${ssh_key_file} ${OPTARG}" ;;
@@ -117,6 +120,29 @@ fi
 [ -z "$offset" ] && offset="2048"	# remainder at the end of the disc, 1 MB
 									# 1 MB approximately for every full and partial 1 TB of disk capacity.
 destdir=${destdir:-/mnt}
+esp_size="800m"						# EFI System Partition size
+
+# auto-detect or validate boot mode
+detect_boot_mode() {
+	if sysctl -n machdep.bootmethod 2>/dev/null | grep -qi uefi; then
+		echo "uefi"
+	elif [ -d /sys/firmware/efi ]; then
+		echo "uefi"
+	else
+		echo "bios"
+	fi
+}
+
+if [ -z "$boot_mode" ] || [ "$boot_mode" = "auto" ]; then
+	boot_mode=$(detect_boot_mode)
+	echo "Auto-detected boot mode: $boot_mode"
+fi
+
+case "$boot_mode" in
+	bios|uefi|hybrid) ;;
+	*) exerr "Invalid boot mode: $boot_mode. Use bios, uefi, or hybrid." ;;
+esac
+echo "Boot mode: $boot_mode"
 
 # autodetect physical network interfaces
 iface=${iface:-"$(ifconfig -l -u | sed -e 's/lo[0-9]*//' -e 's/enc[0-9]*//' -e 's/gif[0-9]*//' \
@@ -273,21 +299,36 @@ echo
 echo "NOTICE: Using ${ref_disk} (smallest or only disk) as reference disk for calculation offsets"
 echo
 
-echo "Creating GPT boot partition on disks:"
-counter=0
-for disk in $provider; do
-	get_disk_labelname
-	echo " ->  ${disk}"
-	gpart add -s 1024 -t freebsd-boot -l boot-${counter} $disk >/dev/null
-	counter=$((counter + 1))
-done
+# Create BIOS boot partition
+if [ "$boot_mode" = "bios" ] || [ "$boot_mode" = "hybrid" ]; then
+	echo "Creating GPT BIOS boot partition on disks:"
+	counter=0
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  ${disk}"
+		gpart add -s 1024 -t freebsd-boot -l boot-${counter} $disk >/dev/null
+		counter=$((counter + 1))
+	done
+fi
+
+# Create EFI System Partition
+if [ "$boot_mode" = "uefi" ] || [ "$boot_mode" = "hybrid" ]; then
+	echo "Creating EFI System Partition (${esp_size}) on disks:"
+	counter=0
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  ${disk}"
+		gpart add -s ${esp_size} -t efi -l efi-${label} $disk >/dev/null
+		counter=$((counter + 1))
+	done
+fi
 
 if [ "${swap_partition_size}" ]; then
-	echo "Creating GPT swap partition on with size ${swap_partition_size} on disks: "
+	echo "Creating GPT swap partition with size ${swap_partition_size} on disks: "
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -b 2048 -s "${swap_partition_size}" -t freebsd-swap -l swap-"${label}" ${disk} >/dev/null
+		gpart add -s "${swap_partition_size}" -t freebsd-swap -l swap-"${label}" ${disk} >/dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
@@ -579,13 +620,35 @@ echo "set-option -g history-limit 300000" >>$destdir/root/.tmux.conf
 
 zfs set readonly=on $poolname/var/empty
 
-echo
-echo "Installing new bootcode on disks: "
-for disk in $provider; do
-	get_disk_labelname
-	echo " ->  ${disk}"
-	gpart bootcode -b /boot/pmbr -p /boot/gptzfsboot -i 1 $disk
-done
+# Install bootcode
+if [ "$boot_mode" = "bios" ] || [ "$boot_mode" = "hybrid" ]; then
+	echo
+	echo "Installing BIOS bootcode on disks: "
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  ${disk}"
+		gpart bootcode -b /boot/pmbr -p /boot/gptzfsboot -i 1 $disk
+	done
+fi
+
+if [ "$boot_mode" = "uefi" ] || [ "$boot_mode" = "hybrid" ]; then
+	echo
+	echo "Installing UEFI loader on disks: "
+	for disk in $provider; do
+		get_disk_labelname
+		echo " ->  ${disk}"
+		newfs_msdos -F 32 -c 1 /dev/gpt/efi-${label}
+		efi_mount=$(mktemp -d)
+		mount -t msdosfs /dev/gpt/efi-${label} ${efi_mount}
+		mkdir -p ${efi_mount}/EFI/BOOT
+		cp $destdir/boot/loader.efi ${efi_mount}/EFI/BOOT/BOOTX64.efi
+		# also install as the FreeBSD-specific path
+		mkdir -p ${efi_mount}/EFI/FreeBSD
+		cp $destdir/boot/loader.efi ${efi_mount}/EFI/FreeBSD/loader.efi
+		umount ${efi_mount}
+		rmdir ${efi_mount}
+	done
+fi
 
 echo You\'ve just been chrooted into your fresh installation.
 echo passwd root
