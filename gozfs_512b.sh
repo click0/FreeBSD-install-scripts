@@ -513,7 +513,7 @@ EOF
 # apply DNS settings
 [ -n "$nameserver" ] && {
 	cat <<EOF >$destdir/etc/resolvconf.conf
-nameserver $nameserver
+name_servers="$nameserver"
 resolv_conf_local_only="NO"
 EOF
 	resolvconf -u
