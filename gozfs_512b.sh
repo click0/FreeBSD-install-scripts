@@ -410,18 +410,20 @@ zpool import ${zpool_option} $poolname
 zpool status
 gpart show
 
-echo "Setting checksum to fletcher4"
-zfs set checksum=fletcher4 $poolname
-zfs set reservation=50M $poolname
+# pool-wide properties
 zfs set compression=lz4 $poolname
-
-zfs create -p $poolname
+zfs set atime=off $poolname
+zfs set acltype=nfsv4 $poolname
+zfs set xattr=sa $poolname
+zfs set reservation=50M $poolname
+zfs set mountpoint=none $poolname
+zfs set canmount=off $poolname
 zfs set freebsd:boot-environment=1 $poolname
-#zpool set bootfs=$poolname $poolname
 
-# Now we create some stuff we also would like to have in separate filesystems
-
-zfs set mountpoint=$destdir $poolname || exit 1
+# Boot Environment container and default BE
+zfs create -o canmount=off -o mountpoint=none $poolname/ROOT
+zfs create -o mountpoint=/ $poolname/ROOT/default
+zpool set bootfs=$poolname/ROOT/default $poolname
 
 if [ -n "${url_file_zfs_skeleton}" ]; then
 	fetch -o /tmp/zfs_skeleton.sh "${url_file_zfs_skeleton}" && sh /tmp/zfs_skeleton.sh
@@ -436,28 +438,25 @@ fi
 
 if [ -z "${url_file_zfs_skeleton}" ] && [ -z "${file_zfs_skeleton}" ]; then
 
-zfs create $poolname/usr
-zfs create $poolname/var
-zfs create -o compression=on    -o exec=on      -o setuid=off   $poolname/tmp
+# /usr and /var are shared-container datasets (canmount=off)
+zfs create -o canmount=off      -o mountpoint=/usr              $poolname/usr
+zfs create -o canmount=off      -o mountpoint=/var              $poolname/var
+zfs create                      -o exec=on      -o setuid=off   $poolname/tmp
 zfs create                      -o exec=on      -o setuid=off   $poolname/usr/ports
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/distfiles
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/packages
 zfs create                      -o exec=on      -o setuid=off   $poolname/usr/src
-zfs create                      -o exec=off     -o setuid=off   $poolname/usr/home
+zfs create                      -o exec=on      -o setuid=off   $poolname/usr/home
+zfs create                      -o exec=off     -o setuid=off   $poolname/var/audit
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/crash
-zfs create                      -o exec=off     -o setuid=off   $poolname/var/db
-zfs create                      -o exec=on      -o setuid=off   $poolname/var/db/pkg
-zfs create                      -o exec=on      -o setuid=off   $poolname/var/ports
-zfs create                      -o exec=off     -o setuid=off   $poolname/var/empty
 zfs create                      -o exec=off     -o setuid=off   $poolname/var/log
 zfs create -o compression=gzip  -o exec=off     -o setuid=off   $poolname/var/mail
-zfs create                      -o exec=off     -o setuid=off   $poolname/var/run
 zfs create                      -o exec=on      -o setuid=off   $poolname/var/tmp
 
 fi
 
 zpool export $poolname
-zpool import -f -d /dev/gpt/ -o cachefile=/tmp/zpool.cache $poolname
+zpool import -f -d /dev/gpt/ -o altroot=$destdir -o cachefile=/tmp/zpool.cache $poolname
 
 zfs list
 
@@ -502,6 +501,7 @@ for file in ${filelist_optional}; do
 		fetch --retry -o "$destdir" "$ftphost/$file"
 	fi
 	if [ "$file" = "MANIFEST" ]; then
+		mkdir -p /usr/freebsd-dist/
 		if [ "x$distdir" = "x" ]; then
 		    cp -a "$destdir/$file" /usr/freebsd-dist/
 		else
@@ -627,8 +627,6 @@ fi
 # Options for tmux
 echo "set-option -g history-limit 300000" >>$destdir/root/.tmux.conf
 
-zfs set readonly=on $poolname/var/empty
-
 # Install bootcode
 if [ "$boot_mode" = "bios" ] || [ "$boot_mode" = "hybrid" ]; then
 	echo
@@ -659,21 +657,34 @@ if [ "$boot_mode" = "uefi" ] || [ "$boot_mode" = "hybrid" ]; then
 	done
 fi
 
-echo You\'ve just been chrooted into your fresh installation.
-echo passwd root
-
 cd /
-[ -d /usr/share/zoneinfo ] && file_timezone=/usr/share/zoneinfo/$timezone;
-chroot $destdir /bin/sh -c "hostname $hostname; make -C /etc/mail aliases;
-[ -e "${file_timezone}" ] && ln -s ${file_timezone} /etc/localtime;"
-echo "$password" | pw -V $destdir/etc usermod root -h 0
-chroot $destdir /bin/sh -c "cd /; umount /dev"
+
+# mount devfs for chroot-time commands (sendmail/newaliases need /dev/null)
+mount -t devfs devfs "$destdir/dev"
+
+# set localtime inside the new system
+if [ -d "$destdir/usr/share/zoneinfo" ] && [ -e "$destdir/usr/share/zoneinfo/$timezone" ]; then
+	chroot "$destdir" ln -sf "/usr/share/zoneinfo/$timezone" /etc/localtime \
+		|| echo "WARN: failed to set /etc/localtime"
+fi
+
+# hostname + mail aliases inside chroot
+env HOSTNAME_="$hostname" chroot "$destdir" /bin/sh -c \
+	'hostname "$HOSTNAME_"; make -C /etc/mail aliases' \
+	|| echo "WARN: chroot setup (hostname/aliases) failed"
+
+# set root password on target
+echo "$password" | pw -V "$destdir/etc" usermod root -h 0 \
+	|| echo "WARN: failed to set root password"
+
+# unmount devfs from outside chroot
+umount "$destdir/dev" || echo "WARN: could not unmount $destdir/dev"
+
+# create Ansible completion marker inside target system
+marker_name=$(basename "$(test -L "$0" && readlink "$0" || echo "$0")").completed
+touch "$destdir/root/$marker_name"
 
 zfs umount -a
-zfs set mountpoint=legacy $poolname
-zfs set mountpoint=/tmp $poolname/tmp
-zfs set mountpoint=/usr $poolname/usr
-zfs set mountpoint=/var $poolname/var
 for disk in $provider; do
 	get_disk_labelname
 	swapoff /dev/gpt/swap-${label}
@@ -685,7 +696,3 @@ echo
 echo "Please reboot the system from the harddisk(s), remove the FreeBSD media from you cdrom!"
 
 zpool export -f $poolname
-
-# for Ansible
-file234=/root/"$(basename "$(test -L "$0" && readlink "$0" || echo "$0")")".completed
-touch "$file234"
