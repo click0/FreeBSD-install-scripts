@@ -50,7 +50,8 @@
 
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
-filelist="base base-dbg lib32 lib32-dbg kernel kernel-dbg"
+filelist="base lib32 kernel"
+filelist_debug="base-dbg lib32-dbg kernel-dbg"
 filelist_optional="MANIFEST"			# only fetch
 memdisknumber=10
 #iface_manual=YES
@@ -63,17 +64,18 @@ memdisknumber=10
 usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_size> -n <zpoolname> -f <ftphost>
 [ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>
 -B <boot_mode> -P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
--z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> ]
+-z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> -x ]
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
 
-boot_mode: auto (default), bios, uefi, hybrid"
+boot_mode: auto (default), bios, uefi, hybrid
+-x: also install debug distribution sets (base-dbg, lib32-dbg, kernel-dbg)"
 
 exerr() {
 	printf '%b\n' "$*" >&2
 	exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K: arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K:x arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -97,6 +99,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K: arg; do
 	Z) url_file_zfs_skeleton=${OPTARG} ;;
 	k) ssh_key_file="${ssh_key_file} ${OPTARG}" ;;
 	K) ssh_key_dir="${ssh_key_dir} ${OPTARG}" ;;
+	x) install_debug=1 ;;
 	?) exerr "${usage}" ;;
 	esac
 done
@@ -123,6 +126,11 @@ fi
 									# 1 MB approximately for every full and partial 1 TB of disk capacity.
 destdir=${destdir:-/mnt}
 esp_size="800m"						# EFI System Partition size
+
+# optionally add debug distribution sets
+if [ "${install_debug}" = "1" ]; then
+	filelist="${filelist} ${filelist_debug}"
+fi
 
 # auto-detect or validate boot mode
 detect_boot_mode() {
