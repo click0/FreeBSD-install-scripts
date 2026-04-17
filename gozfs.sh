@@ -462,7 +462,7 @@ if [ -z "${url_file_zfs_skeleton}" ] && [ -z "${file_zfs_skeleton}" ]; then
 # /usr and /var are shared-container datasets (canmount=off)
 zfs create -o canmount=off      -o mountpoint=/usr              $poolname/usr
 zfs create -o canmount=off      -o mountpoint=/var              $poolname/var
-zfs create                      -o exec=on      -o setuid=off   $poolname/tmp
+zfs create                      -o mountpoint=/tmp              -o exec=on      -o setuid=off   $poolname/tmp
 zfs create                      -o exec=on      -o setuid=off   $poolname/usr/ports
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/distfiles
 zfs create -o compression=off   -o exec=off     -o setuid=off   $poolname/usr/ports/packages
