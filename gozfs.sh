@@ -616,7 +616,7 @@ fi
 
 cat <<EOF >>$destdir/boot/loader.conf
 zfs_load="YES"
-vfs.root.mountfrom="zfs:$poolname"
+vfs.root.mountfrom="zfs:$poolname/ROOT/default"
 kern.geom.label.gptid.enable=0
 kern.geom.label.disk_ident.enable=0
 debug.acpi.disabled="thermal"
