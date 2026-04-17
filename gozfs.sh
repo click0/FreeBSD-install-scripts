@@ -50,7 +50,7 @@
 
 ftphost="ftp://ftp.de.freebsd.org/pub/FreeBSD/releases/amd64/amd64/12.3-BETA3/"
 ftp_mirror_list="ftp6.ua ftp1.fr ftp2.de"
-filelist="base lib32 kernel"
+filelist="base base-dbg lib32 lib32-dbg kernel kernel-dbg"
 filelist_optional="MANIFEST"			# only fetch
 memdisknumber=10
 #iface_manual=YES
@@ -337,8 +337,10 @@ fi
 
 ###offset=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $1}')
 last_partition_disk_size=$(gpart show ${ref_disk} | grep '\- free \-' | tail -n 1 | awk '{print $2}')
+sector_size=$(gpart list ${ref_disk} | awk '/Sectorsize:/{print $2; exit}')
+[ -z "${sector_size}" ] && sector_size=512
 if [ "${zfs_partition_size}" ] && [ "${last_partition_disk_size}" -le "${smallest_disk_size}" ]; then
-	size_string="-s $((zfs_partition_size - offset))"
+	size_string="-s $((_zfs_partition_size / sector_size - offset))"
 else
 	size_string="-s $((last_partition_disk_size - offset))"
 fi
