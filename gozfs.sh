@@ -162,17 +162,28 @@ iface=${iface:-"em0 em1 re0 igb0 vtnet0"}
 
 if [ "$gateway" = "auto" ] || [ "${ip_address}" = "auto" ]; then
 	gateway=$(netstat -rn4 | awk '/default/{print $2;}')
-	ip_address=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2 }' | head -1)
-	net_mask=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $4 }' | head -1)
+	auto_ip=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $2 }' | head -1)
+	auto_mask_hex=$(ifconfig | grep 'inet\b' | grep -v 127.0 | awk '{ print $4 }' | head -1)
+	if [ -n "${auto_mask_hex}" ]; then
+		mask_int=$(printf '%d' "${auto_mask_hex}")
+		bits=0
+		while [ "${mask_int}" -ne 0 ]; do
+			bits=$((bits + (mask_int & 1)))
+			mask_int=$((mask_int >> 1))
+		done
+		ip_address="${auto_ip}/${bits}"
+	else
+		ip_address="${auto_ip}"
+	fi
 fi
 
 [ "$gateway" = "DHCP" ] && gateway=''
 [ "${ip_address}" = "DHCP" ] && ip_address=''
 
-if [ -n "$gateway" ] && [ -n "${ip_address}" ] && [ -n "${net_mask}" ]; then
+if [ -n "$gateway" ] && [ -n "${ip_address}" ]; then
 	iface_manual=yes
-	manual_gw="defaultrouter=\"$gateway\""                      # gateway IP
-	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address} netmask ${net_mask}\"" # interface IP and netmask
+	manual_gw="defaultrouter=\"$gateway\""                             # gateway IP
+	manual_iface="ifconfig_${iface%% *}=\"inet ${ip_address}\""        # interface IP with optional /CIDR
 fi
 
 sysctl kern.geom.label.gptid.enable=0
