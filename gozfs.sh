@@ -65,23 +65,25 @@ usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_s
 [ -m <zpool-raidmode> -d <distribution_dir> -D <destination_dir> -M <size_memory_disk> -o <offset_end_disk> -a <ashift_disk>
 -B <boot_mode> -P <new_password> -t <timezone> -k <url_ssh_key_file> -K <url_ssh_key_dir>
 -z <file_zfs_skeleton> -Z <url_file_zfs_skeleton> -x ]
-[ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
+[ -g <gateway> [-i <iface>] -I <IP_address/mask> -N <dns1,dns2,...> ]
 
 boot_mode: auto (default), bios, uefi, hybrid
--x: also install debug distribution sets (base-dbg, lib32-dbg, kernel-dbg)"
+-x: also install debug distribution sets (base-dbg, lib32-dbg, kernel-dbg)
+-N: comma- or space-separated DNS servers for the target system"
 
 exerr() {
 	printf '%b\n' "$*" >&2
 	exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K:x arg; do
+while getopts p:P:s:S:n:N:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K:x arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
 	s) swap_partition_size=${OPTARG} ;;
 	S) zfs_partition_size=${OPTARG} ;;
 	n) poolname=${OPTARG} ;;
+	N) nameserver=${OPTARG} ;;
 	h) hostname=${OPTARG} ;;
 	f) ftphost=${OPTARG} ;;
 	m) mode=${OPTARG} ;;
@@ -91,7 +93,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:z:Z:k:K:x arg; do
 	D) destdir=${OPTARG} ;;	# mount point of the new pool
 	t) timezone=${OPTARG} ;;
 	g) gateway=${OPTARG} ;;
-	i) iface=${OPTARG} ;;
+	i) iface=${OPTARG}; iface_cli=${OPTARG} ;;
 	I) ip_address=${OPTARG} ;;
 	a) ashift=${OPTARG} ;;
 	B) boot_mode=${OPTARG} ;;
@@ -107,6 +109,11 @@ shift "$((OPTIND-1))"
 
 if [ -z "$poolname" ] || [ -z "$provider" ]; then
 	exerr "${usage}"
+fi
+
+# Require explicit -i when a static IP is given, so we don't guess the interface.
+if [ -n "$ip_address" ] && [ "$ip_address" != "auto" ] && [ "$ip_address" != "DHCP" ] && [ -z "$iface_cli" ]; then
+	exerr "Static -I requires an explicit -i <interface>. Given: -I $ip_address"
 fi
 
 # count the number of providers
@@ -189,11 +196,6 @@ fi
 sysctl kern.geom.label.gptid.enable=0
 sysctl kern.geom.debugflags=16
 # sysctl vfs.zfs.min_auto_ashift=13	# need module zfs
-
-[ -n "$nameserver" ] && {
-	mkdir -p /tmp/bsdinstall_etc
-	echo "nameserver $nameserver" >/tmp/bsdinstall_etc/resolv.conf
-}
 
 if [ -n "$distdir" ]; then
 	if [ ! -d "$distdir" ]; then
@@ -552,20 +554,23 @@ sshd_flags="-oPort=22 -oCompression=yes -oPermitRootLogin=yes -oPasswordAuthenti
 dumpdev="AUTO"
 EOF
 
-# apply DNS settings
-[ -n "$nameserver" ] && {
-	cat <<EOF >$destdir/etc/resolvconf.conf
-name_servers="$nameserver"
+# apply DNS settings to target
+if [ -n "$nameserver" ]; then
+	ns_list=$(echo "$nameserver" | tr ',' ' ')
+	cat <<EOF >"$destdir/etc/resolvconf.conf"
+name_servers="${ns_list}"
 resolv_conf_local_only="NO"
 EOF
-	resolvconf -u
-}
+	: >"$destdir/etc/resolv.conf"
+	for ns in $ns_list; do
+		echo "nameserver $ns" >>"$destdir/etc/resolv.conf"
+	done
+fi
 
 if [ "${iface_manual}" = "1" ] || [ "${iface_manual}" = "yes" ] || [ "${iface_manual}" = "YES" ]; then
 	cat <<EOF >>$destdir/etc/rc.conf
 ${manual_gw}
 ${manual_iface}
-ifconfig_DEFAULT="SYNCDHCP"
 ifconfig_enc0="NOAUTO"
 
 EOF
