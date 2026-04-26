@@ -3,8 +3,7 @@
 
 ### Склад
 ***
-- `gozfs_512b.sh` - скрипт для встановлення FreeBSD на диски з розміром блоку 512 байт.
-- `gozfs.sh` - скрипт для встановлення FreeBSD на диски з розміром блоку 4k або 8k.
+- `gozfs.sh` - скрипт для встановлення FreeBSD на ZFS. Розмір блоку обирається ключем `-a` (`512b`, `4k` (за замовчуванням) або `8k`).
 - `install_mfsbsd_img_to_sda.sh` - скрипт для запису [MfsBSD](https://mfsbsd.vx.sk/) .img _на працюючу_ систему Linux на перший HDD (з негарантованим результатом)
 - `install_mfsbsd_iso.sh` - скрипт для запису [MfsBSD](https://mfsbsd.vx.sk/) ISO _на працюючу_ систему Linux
 - `mfsbsd_repack.sh` - скрипт для перепакування образу MfsBSD з додаванням мережевих налаштувань.
@@ -15,7 +14,7 @@
 
 Для встановлення використовується стандартний образ MfsBSD, де є застосунок `tmux` та доступи `root/mfsroot`.
 Самі архіви FreeBSD нам в образі не потрібні, ми їх окремо завантажимо зі свого або публічного http сервера.
-Доступи до нової системи, якщо в аргументах не задали новий пароль, після встановлення скриптами `gozfs.sh`/`gozfs_512b.sh` - `root/mfsroot123`.
+Доступи до нової системи, якщо в аргументах не задали новий пароль, після встановлення скриптом `gozfs.sh` - `root/mfsroot123`.
 MfsBSD **НЕ** підтримує IPv6.
 
 ### Стратегії використання
@@ -37,12 +36,15 @@ MfsBSD **НЕ** підтримує IPv6.
 
 ### Синтаксис скриптів
 
-- `gozfs.sh`/`gozfs_512b.sh`
+- `gozfs.sh`
 
         sh gozfs.sh -p vtbd0 -s4G -n zroot
     або
 
         sh gozfs.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"
+    або, для застарілих дисків з фізичним сектором 512 байт:
+
+        sh gozfs.sh -p ada0 -s4G -n tank -a 512b
 
     Повний синтаксис:
     ```
@@ -75,7 +77,6 @@ MfsBSD **НЕ** підтримує IPv6.
 - [MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
-- `gozfs_512b.sh`
 - `mfsbsd_repack.sh`
 
 #### Автор:

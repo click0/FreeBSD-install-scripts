@@ -68,6 +68,7 @@ usage="Usage: $0 -p <geom_provider> -s <swap_partition_size> -S <zfs_partition_s
 [ -g <gateway> [-i <iface>] -I <IP_address/mask> ]
 
 boot_mode: auto (default), bios, uefi, hybrid
+ashift_disk: 512b, 4k (default), 8k
 -x: also install debug distribution sets (base-dbg, lib32-dbg, kernel-dbg)"
 
 exerr() {
@@ -121,7 +122,30 @@ fi
 [ -z "$memdisksize" ] && memdisksize=350M # deprecated
 [ -z "$password" ] && password="mfsroot123"
 [ -z "$hostname" ] && hostname="core.domain.com"
-[ -z "$ashift" ] && ashift="4k"		# 4k or 8k
+[ -z "$ashift" ] && ashift="4k"		# 512b, 4k or 8k
+
+case "$ashift" in
+	512b)
+		# Native 512-byte sectors: no gnop wrapper, no gpart alignment override.
+		gpart_align_arg=""
+		gnop_size=""
+		min_auto_ashift_val=12
+		nop_suffix=""
+		;;
+	4k)
+		gpart_align_arg="-a 4k"
+		gnop_size=4096
+		min_auto_ashift_val=13
+		nop_suffix=".nop"
+		;;
+	8k)
+		gpart_align_arg="-a 8k"
+		gnop_size=8192
+		min_auto_ashift_val=13
+		nop_suffix=".nop"
+		;;
+	*) exerr "Invalid ashift: $ashift. Use 512b, 4k, or 8k." ;;
+esac
 [ -z "$offset" ] && offset="2048"	# remainder at the end of the disc, 1 MB
 									# 1 MB approximately for every full and partial 1 TB of disk capacity.
 destdir=${destdir:-/mnt}
@@ -316,7 +340,7 @@ if [ "$boot_mode" = "bios" ] || [ "$boot_mode" = "hybrid" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk}"
-		gpart add -s 1024 -t freebsd-boot -a $ashift -l boot-${counter} $disk >/dev/null
+		gpart add -s 1024 -t freebsd-boot ${gpart_align_arg} -l boot-${counter} $disk >/dev/null
 		counter=$((counter + 1))
 	done
 fi
@@ -328,7 +352,7 @@ if [ "$boot_mode" = "uefi" ] || [ "$boot_mode" = "hybrid" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk}"
-		gpart add -s ${esp_size} -t efi -a $ashift -l efi-${label} $disk >/dev/null
+		gpart add -s ${esp_size} -t efi ${gpart_align_arg} -l efi-${label} $disk >/dev/null
 		counter=$((counter + 1))
 	done
 fi
@@ -338,7 +362,7 @@ if [ "${swap_partition_size}" ] && [ "${swap_partition_size}" != "0" ]; then
 	for disk in $provider; do
 		get_disk_labelname
 		echo " ->  ${disk} (Label: ${label})"
-		gpart add -s "${swap_partition_size}" -t freebsd-swap -a $ashift -l swap-"${label}" ${disk} >/dev/null
+		gpart add -s "${swap_partition_size}" -t freebsd-swap ${gpart_align_arg} -l swap-"${label}" ${disk} >/dev/null
 		swapon /dev/gpt/swap-${label}
 	done
 fi
@@ -361,10 +385,10 @@ fi
 for disk in $provider; do
 	get_disk_labelname
 	echo " ->  ${disk} (Label: ${label})"
-	gpart add -t freebsd-zfs ${size_string} -a $ashift -l system-${label} ${disk} >/dev/null
+	gpart add -t freebsd-zfs ${size_string} ${gpart_align_arg} -l system-${label} ${disk} >/dev/null
 
 	counter=$((counter + 1))
-	labellist="${labellist} gpt/system-${label}.nop"
+	labellist="${labellist} gpt/system-${label}${nop_suffix}"
 	if [ "$((counter % 2))" -eq "0" ] && [ "$devcount" -ne "$counter" ] && [ "$mode" = "raid10" ]; then
 		labellist="${labellist} mirror "
 	fi
@@ -378,24 +402,24 @@ ls -l /dev/gpt/
 
 if ! /sbin/kldstat -m zfs >/dev/null 2>&1; then
 	/sbin/kldload zfs >/dev/null 2>&1
-	sysctl vfs.zfs.min_auto_ashift=13 # need module zfs
+	sysctl vfs.zfs.min_auto_ashift=${min_auto_ashift_val} # need module zfs
 fi
-if ! /sbin/kldstat -m g_nop >/dev/null 2>&1; then
+if [ -n "${gnop_size}" ] && ! /sbin/kldstat -m g_nop >/dev/null 2>&1; then
 	/sbin/kldload geom_nop.ko >/dev/null 2>&1
 fi
 
 # we need to create /boot/zfs so zpool.cache can be written.
 [ ! -d /boot/zfs ] && mkdir /boot/zfs
 
-# create gnop
-[ "$ashift" = "4k" ] && gnop_ashift=4096
-[ "$ashift" = "8k" ] && gnop_ashift=8192
-for disk in $provider; do
-	get_disk_labelname
-	gnop create -S ${gnop_ashift} /dev/gpt/system-${label} >/dev/null
-done
-# Show gnop output
-gnop list
+# create gnop wrapper to force ashift on disks that report 512-byte sectors
+if [ -n "${gnop_size}" ]; then
+	for disk in $provider; do
+		get_disk_labelname
+		gnop create -S ${gnop_size} /dev/gpt/system-${label} >/dev/null
+	done
+	# Show gnop output
+	gnop list
+fi
 
 zpool_option="-o altroot=$destdir -o cachefile=/tmp/zpool.cache"
 # Create the pool and the rootfs
@@ -421,10 +445,12 @@ fi
 zpool export $poolname
 
 # destroy gnop
-for disk in $provider; do
-	get_disk_labelname
-	gnop destroy /dev/gpt/system-${label}.nop >/dev/null
-done
+if [ -n "${gnop_size}" ]; then
+	for disk in $provider; do
+		get_disk_labelname
+		gnop destroy /dev/gpt/system-${label}.nop >/dev/null
+	done
+fi
 ls -l /dev/gpt/
 sleep 3
 zpool import ${zpool_option} $poolname

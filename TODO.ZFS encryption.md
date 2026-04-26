@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add disk encryption support to `gozfs.sh` and `gozfs_512b.sh` installation scripts.
+Add disk encryption support to the `gozfs.sh` installation script.
 Two approaches: GELI (FreeBSD native) and ZFS native encryption (OpenZFS 2.0+).
 
 ## Encryption Methods
