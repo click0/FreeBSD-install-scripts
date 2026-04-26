@@ -71,8 +71,11 @@ boot_mode: auto (default), bios, uefi, hybrid
 ashift_disk: 512b, 4k (default), 8k
 encryption_mode: none (default), native
   When 'native': creates an extra encrypted dataset <poolname>/encrypted
-  with aes-256-gcm. Passphrase is read from \$ZFS_ENCRYPT_PASSPHRASE env var
-  or prompted interactively. Unlocked at boot via the zfskeys rc service.
+  with aes-256-gcm. Passphrase source (in priority order):
+    -e <file>  --  read passphrase from file (recommended; avoids shell quoting)
+    \$ZFS_ENCRYPT_PASSPHRASE env var
+    interactive prompt
+  Unlocked at boot via the zfskeys rc service.
 -x: also install debug distribution sets (base-dbg, lib32-dbg, kernel-dbg)"
 
 exerr() {
@@ -80,7 +83,7 @@ exerr() {
 	exit 1
 }
 
-while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:E:z:Z:k:K:x arg; do
+while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:E:e:z:Z:k:K:x arg; do
 	case ${arg} in
 	p) provider="$provider ${OPTARG}" ;;
 	P) password=${OPTARG} ;;
@@ -101,6 +104,7 @@ while getopts p:P:s:S:n:h:f:m:M:o:d:D:t:g:i:I:a:B:E:z:Z:k:K:x arg; do
 	a) ashift=${OPTARG} ;;
 	B) boot_mode=${OPTARG} ;;
 	E) encryption_mode=${OPTARG} ;;
+	e) encrypt_passphrase_file=${OPTARG} ;;
 	z) file_zfs_skeleton=${OPTARG} ;;
 	Z) url_file_zfs_skeleton=${OPTARG} ;;
 	k) ssh_key_file="${ssh_key_file} ${OPTARG}" ;;
@@ -163,7 +167,15 @@ encrypt_keyfile=""
 if [ "$encryption_mode" = "native" ]; then
 	encrypt_keyfile=$(mktemp /tmp/zfs_passphrase.XXXXXX) || exerr "Cannot create passphrase tempfile"
 	chmod 600 "$encrypt_keyfile"
-	if [ -n "$ZFS_ENCRYPT_PASSPHRASE" ]; then
+	if [ -n "$encrypt_passphrase_file" ]; then
+		# Most shell-portable path (csh-friendly, no quoting hazards).
+		[ -r "$encrypt_passphrase_file" ] || {
+			rm -f "$encrypt_keyfile"
+			exerr "Passphrase file not readable: $encrypt_passphrase_file"
+		}
+		# Strip any trailing newline so 'echo passphrase > file' just works.
+		awk 'NR==1{printf "%s", $0; exit}' "$encrypt_passphrase_file" > "$encrypt_keyfile"
+	elif [ -n "$ZFS_ENCRYPT_PASSPHRASE" ]; then
 		printf '%s' "$ZFS_ENCRYPT_PASSPHRASE" > "$encrypt_keyfile"
 	else
 		printf 'Enter ZFS encryption passphrase (>=8 chars): ' >&2
