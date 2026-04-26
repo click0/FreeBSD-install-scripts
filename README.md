@@ -3,8 +3,7 @@ Here is a set of scripts intended for a guaranteed installation of the FreeBSD O
 
 ### Set composition
 ***
-- `gozfs_512b.sh` - script to install FreeBSD on disks with block size 512 bytes.
-- `gozfs.sh` - script to install FreeBSD on disks with block size 4k or 8k bytes.
+- `gozfs.sh` - script to install FreeBSD on ZFS. Block size is selected via `-a` (`512b`, `4k` (default) or `8k`).
 - `install_mfsbsd_img_to_sda.sh` - script to write [MfsBSD](https://mfsbsd.vx.sk) .img _to a running_ Linux system on the first HDD (with non-guaranteed results)
 - `install_mfsbsd_iso.sh` - script to write [MfsBSD](https://mfsbsd.vx.sk) ISO _on a running_ Linux system
 - `mfsbsd_repack.sh` - script for repacking the MfsBSD image with the addition of network settings.
@@ -15,7 +14,7 @@ Here is a set of scripts intended for a guaranteed installation of the FreeBSD O
 
 For installation, a standard MfsBSD image is used, where there is a `tmux` application and `root/mfsroot` accesses.  
 We do not need the FreeBSD archives in the image, we will download them separately from our own or public http server.  
-Access to the new system, if no new password was specified in the arguments, after setting the scripts `gozfs.sh`/`gozfs_512b.sh` - `rootmfsroot123`.  
+Access to the new system, if no new password was specified in the arguments, after running `gozfs.sh` - `root/mfsroot123`.  
 MfsBSD does **NOT** support IPv6.
 
 ### Usage strategies
@@ -37,12 +36,15 @@ MfsBSD does **NOT** support IPv6.
 
 ### Script syntax
 
-- `gozfs.sh`/`gozfs_512b.sh`
+- `gozfs.sh`
   
         sh gozfs.sh -p vtbd0 -s4G -n zroot
   or
   
-        sh gozfs.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"   
+        sh gozfs.sh -p ada0 -p ada1 -s4G -n tank -m mirror -P "my_new_pass"
+  or, for legacy disks with native 512-byte sectors:
+  
+        sh gozfs.sh -p ada0 -s4G -n tank -a 512b
 
     Full syntax:
     ```
@@ -75,7 +77,6 @@ MfsBSD does **NOT** support IPv6.
 - [MfsBSD and kFreeBSD](https://forums.freebsd.org/threads/tip-booting-mfsbsd-iso-file-from-grub2-depenguination.46480/)
 
 ###### Deprecated:
-- `gozfs_512b.sh`
 - `mfsbsd_repack.sh`
 
 #### Author:
